@@ -1,6 +1,6 @@
 # PCP# undecidability
 This project formalizes the proof that Post's Correspondence Problem (PCP) is undecidable. The proof follows the reduction chain:
-Lu​ ≤ m​MPCP ≤ m​PCP
+Lu​ ≤_m ​MPCP ≤_m ​PCP
 
     Universal Language (Lu​): We assume the undecidability of the Halting Problem/Universal Language.
 
