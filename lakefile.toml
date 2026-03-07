@@ -1,0 +1,21 @@
+name = "PCP"
+version = "0.1.0"
+defaultTargets = ["pcp"]
+
+
+
+[[lean_lib]]
+name = "PCP"
+
+
+[[require]]
+name = "cslib"
+scope = "leanprover"
+rev = "main"
+
+
+[[lean_exe]]
+name = "pcp"
+root = "Main"
+
+
