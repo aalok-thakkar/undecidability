@@ -1,115 +1,228 @@
+import Cslib.Foundations.Data.BiTape
+import Cslib.Foundations.Data.RelatesInSteps
+import Mathlib.Algebra.Polynomial.Eval.Defs
+import Cslib.Computability.Machines.SingleTapeTuring.Basic
 
-module
+/-!
+# Post Correspondence Problem (PCP)
 
---public import Cslib.Foundations.Data.BiTape
-public import Cslib.Foundations.Data.RelatesInSteps
-public import Mathlib.Algebra.Polynomial.Eval.Defs
---public import Cslib.Computability.Machines.SingleTapeTuring.Basic
+This file formalises the Post Correspondence Problem in two equivalent ways:
 
-@[expose] public section
+* **Frontend** (`HasSolution`): a computable definition over `Fin`-indexed sequences,
+  suitable for `#eval` and concrete instances.
+* **Backend** (`dPCP`): an inductive-relation definition, suitable for structural
+  induction and metatheory reductions.
+
+The two definitions are shown to be equivalent in `hasSolution_iff_dPCP`.
+-/
 
 namespace PCP
 
-variable {α : Type} [DecidableEq α]
+variable {α : Type}
 
-/-- A word over alphabet α -/
-abbrev Word α:= List α
+/-! ## Basic types -/
 
-/-- A PCP tile consists of a top and bottom word -/
+/-- A word over alphabet `α` is a list of symbols. -/
+abbrev Word (α : Type) := List α
+
+/-- A PCP tile consists of a top word and a bottom word. -/
 structure Tile (α : Type) where
-  top    : List α
-  bottom : List α
+  top : Word α
+  bot : Word α
+  deriving DecidableEq, Repr
 
-/-- A PCP PCP_Instance is a finite list of tiles -/
-abbrev PCP_Instance (α : Type):= List (Tile α)
+/-- A PCP instance is a finite list of tiles. -/
+abbrev Instance (α : Type) := List (Tile α)
 
-/-- Concatenate the top strings according to a list of indices -/
-def concatTop {α}
-  (P : PCP_Instance α)
-  (idxs : List (Fin P.length)) :
-  List α := idxs.flatMap (fun i => (P.get i).top)
+/-! ## Frontend: computable definition -/
 
+/-- Concatenate the top words of the tiles selected by `idxs`. -/
+def concatTop (P : Instance α) (idxs : List (Fin P.length)) : Word α :=
+  idxs.flatMap fun i => (P.get i).top
 
-/-- Concatenate the bottom strings according to a list of indices -/
-def concatBot {α}
-  (P : PCP_Instance α)
-  (idxs : List (Fin P.length)) :
-  List α :=
-  idxs.flatMap (fun i => (P.get i).bottom)
+/-- Concatenate the bottom words of the tiles selected by `idxs`. -/
+def concatBot (P : Instance α) (idxs : List (Fin P.length)) : Word α :=
+  idxs.flatMap fun i => (P.get i).bot
 
+/-- `idxs` is a solution to `P` if it is nonempty and the top and bottom
+concatenations agree. -/
+def IsSolution (P : Instance α) (idxs : List (Fin P.length)) : Prop :=
+  idxs ≠ [] ∧ concatTop P idxs = concatBot P idxs
 
-/-- A sequence of indices is a solution if:
-    - it is nonempty
-    - the concatenated top and bottom strings agree -/
-def IsSolution (P : PCP_Instance α) (idxs : List (Fin P.length)) : Prop :=
-  idxs ≠ [] ∧
-  concatTop P idxs = concatBot P idxs
-
-/-- The PCP predicate: there exists a nonempty matching index sequence -/
-def HasSolution (P : List (Tile α)) :=
+/-- `P` has a solution if some nonempty index sequence is a solution. -/
+def HasSolution (P : Instance α) : Prop :=
   ∃ idxs : List (Fin P.length), IsSolution P idxs
 
-def getTile (P : List (Tile α)) (i : Fin P.length) : Tile α :=
-  P.get ⟨i.val, i.isLt⟩
+/-! ## Backend: inductive-relation definition -/
 
+/-- `Derivable P u v` holds when the pair `(u, v)` can be built by
+concatenating tiles from `P` (at least one tile must be used). -/
+inductive Derivable (P : Instance α) : Word α → Word α → Prop
+  | single (t : Tile α) (ht : t ∈ P) :
+      Derivable P t.top t.bot
+  | cons (t : Tile α) (u v : Word α) (ht : t ∈ P) (h : Derivable P u v) :
+      Derivable P (t.top ++ u) (t.bot ++ v)
 
+/-- The inductive (Coq-style) PCP predicate: `P` has a solution iff some
+word `u` is derivable from itself. -/
+def dPCP (P : Instance α) : Prop :=
+  ∃ u : Word α, Derivable P u u
 
-structure MPCP_Instance (α : Type) :=
-  (first : Tile α)
-  (rest  : List (Tile α))
+/-! ## Auxiliary lemmas -/
+
+/-- Membership in a list is equivalent to existence of a `Fin` index. -/
+@[simp]
+theorem mem_iff_exists_fin (P : Instance α) (t : Tile α) :
+    t ∈ P ↔ ∃ i : Fin P.length, P.get i = t :=
+  ⟨List.get_of_mem, fun ⟨i, hi⟩ => hi ▸ List.get_mem P i⟩
 
 @[simp]
-def NMconcatTop {α}
-  (P : MPCP_Instance α)
-  (idxs : List (Fin P.rest.length)) :
-  List α :=
-  P.first.top ++
-    idxs.flatMap (fun i => (P.rest.get i).top)
+theorem concatTop_nil (P : Instance α) :
+    concatTop P [] = [] := rfl
 
-def NMconcatBottom {α}
-  (P : MPCP_Instance α)
-  (idxs : List (Fin P.rest.length)) :
-  List α :=
-  P.first.bottom ++
-    idxs.flatMap (fun i => (P.rest.get i).bottom)
+@[simp]
+theorem concatBot_nil (P : Instance α) :
+    concatBot P [] = [] := rfl
 
-def MHasSolution {α}
-  (P : MPCP_Instance α) : Prop :=
-  ∃ idxs : List (Fin P.rest.length),
-    NMconcatTop P idxs =
-    NMconcatBottom P idxs
+@[simp]
+theorem concatTop_cons (P : Instance α) (i : Fin P.length)
+    (is : List (Fin P.length)) :
+    concatTop P (i :: is) = (P.get i).top ++ concatTop P is := by
+  simp [concatTop]
 
-lemma MconcatTop_nil {α} (P : MPCP_Instance α) :
-  NMconcatTop P [] = P.first.top := by
-  simp
+@[simp]
+theorem concatBot_cons (P : Instance α) (i : Fin P.length)
+    (is : List (Fin P.length)) :
+    concatBot P (i :: is) = (P.get i).bot ++ concatBot P is := by
+  simp [concatBot]
 
-lemma MconcatTop_cons {α}
-  (P : MPCP_Instance α)
-  (i : Fin P.rest.length)
-  (is : List (Fin P.rest.length)) :
-  NMconcatTop P (i :: is) =
-    P.first.top ++
-      (P.rest.get i).top ++
-      is.flatMap (fun j => (P.rest.get j).top) := by
-  simp
+/-! ## Bridge: equivalence between frontend and backend -/
 
-/-MPCP tp PCP conversion-/
+/-- Any nonempty index sequence gives a `Derivable` pair. -/
+theorem derivable_of_isSolution {P : Instance α}
+    {idxs : List (Fin P.length)} (hne : idxs ≠ []) :
+    Derivable P (concatTop P idxs) (concatBot P idxs) := by
+  induction idxs with
+  | nil => grind
+  | cons x xs ih => cases xs with
+      |nil => simp[concatTop, concatBot, Derivable.single]
+      |cons y ys =>
+        simp at ih
+        refine
+          Derivable.cons P[↑x] (P[↑y].top ++ concatTop P ys) (P[↑y].bot ++ concatBot P ys) ?_ ih
+        grind
 
+
+
+/-- Any `Derivable` pair arises from a nonempty index sequence. -/
+theorem isSolution_of_derivable {P : Instance α} {u v : Word α}
+    (h : Derivable P u v) :
+    ∃ idxs : List (Fin P.length),
+      u = concatTop P idxs ∧ v = concatBot P idxs ∧ idxs ≠ [] := by
+  induction h with
+  | single t ht =>
+    rw [mem_iff_exists_fin] at ht
+    obtain ⟨i, rfl⟩ := ht
+    exact ⟨[i], by simp, by simp, List.cons_ne_nil i []⟩
+  | cons t u v _ht _h ih =>
+    obtain ⟨idxs, hu, hv, hne⟩ := ih
+    rw [mem_iff_exists_fin] at _ht
+    obtain ⟨i, rfl⟩ := _ht
+    exact ⟨i :: idxs, by simp [hu], by simp [hv], List.cons_ne_nil i idxs⟩
+
+/-- `HasSolution P` implies `dPCP P`. -/
+theorem hasSolution_implies_dPCP {P : Instance α} (h : HasSolution P) :
+    dPCP P := by
+  obtain ⟨idxs, hne, heq⟩ := h
+  exact ⟨concatTop P idxs, heq ▸ derivable_of_isSolution hne⟩
+
+/-- `dPCP P` implies `HasSolution P`. -/
+theorem dPCP_implies_hasSolution {P : Instance α} (h : dPCP P) :
+    HasSolution P := by
+  obtain ⟨u, hd⟩ := h
+  obtain ⟨idxs, hu, hv, hne⟩ := isSolution_of_derivable hd
+  exact ⟨idxs, hne, hu ▸ hv ▸ rfl⟩
+
+/-- **Main equivalence**: the two PCP definitions coincide. -/
+theorem hasSolution_iff_dPCP (P : Instance α) :
+    HasSolution P ↔ dPCP P :=
+  ⟨hasSolution_implies_dPCP, dPCP_implies_hasSolution⟩
+
+
+structure MInstance (α : Type) where
+  /-- The full tile list (the start tile is `tiles[startIdx]`). -/
+  tiles    : Instance α
+  /-- Index of the tile that must begin every solution. -/
+  startIdx : Fin tiles.length
+  deriving Repr
+
+/-- Concatenate the top words of `idxs` from `M.tiles`. -/
+def mconcatTop (M : MInstance α) (idxs : List (Fin M.tiles.length)) : Word α :=
+  idxs.flatMap fun i => (M.tiles.get i).top
+
+/-- Concatenate the bottom words of `idxs` from `M.tiles`. -/
+def mconcatBot (M : MInstance α) (idxs : List (Fin M.tiles.length)) : Word α :=
+  idxs.flatMap fun i => (M.tiles.get i).bot
+
+/-- `idxs` is an MPCP solution for `M` if:
+    * it is nonempty,
+    * it starts with the designated start tile, and
+    * the top and bottom concatenations agree. -/
+def MIsSolution (M : MInstance α) (idxs : List (Fin M.tiles.length)) : Prop :=
+  idxs ≠ [] ∧
+  idxs.head? = some M.startIdx ∧
+  mconcatTop M idxs = mconcatBot M idxs
+
+/-- `M` has an MPCP solution. -/
+def MHasSolution (M : MInstance α) : Prop :=
+  ∃ idxs : List (Fin M.tiles.length), MIsSolution M idxs
+
+/-! ### Basic simp lemmas for `mconcatTop`/`mconcatBot` -/
+
+@[simp]
+theorem mconcatTop_nil (M : MInstance α) :
+    mconcatTop M [] = [] := rfl
+
+@[simp]
+theorem mconcatBot_nil (M : MInstance α) :
+    mconcatBot M [] = [] := rfl
+
+@[simp]
+theorem mconcatTop_cons (M : MInstance α) (i : Fin M.tiles.length)
+    (is : List (Fin M.tiles.length)) :
+    mconcatTop M (i :: is) = (M.tiles.get i).top ++ mconcatTop M is := by
+  simp [mconcatTop]
+
+@[simp]
+theorem mconcatBot_cons (M : MInstance α) (i : Fin M.tiles.length)
+    (is : List (Fin M.tiles.length)) :
+    mconcatBot M (i :: is) = (M.tiles.get i).bot ++ mconcatBot M is := by
+  simp [mconcatBot]
+
+/-! ## Alphabet extension for the reduction -/
+
+/-- Extend the alphabet `α` with two fresh markers used in the MPCP→PCP
+    reduction:
+    * `old a`   — a lifted symbol from the original alphabet;
+    * `star`    — the interleaving marker `⋆`, placed *before* each symbol
+                  in the top interleaving and *after* each symbol in the
+                  bottom interleaving;
+    * `dollar`  — the end-of-string marker `$` appended to close the solution. -/
 inductive SymbolExt (α : Type) : Type
-| old : α → SymbolExt α
-| marker : SymbolExt α
-| endMarker : SymbolExt α
+  | old    : α → SymbolExt α
+  | marker : SymbolExt α
+  | endMarker : SymbolExt α
+  deriving DecidableEq
 
 notation "⋆" => SymbolExt.marker
 notation "⋄" => SymbolExt.endMarker
 
--- Optional: Use an up-arrow to lift normal alphabet characters
-prefix:max "↑" => SymbolExt.old
+prefix:max "↑ₛ" => SymbolExt.old   -- `↑ₛ` to avoid clashing with `↑` (coe)
 
 -- For the Goal State (infoview)
 instance {α : Type} [Repr α] : Repr (SymbolExt α) where
   reprPrec
-    | SymbolExt.old a, _ => f!"↑{repr a}"
+    | SymbolExt.old a, _ => f!"↑ₛ{repr a}"
     | SymbolExt.marker, _ => f!"⋆"
     | SymbolExt.endMarker, _ => f!"⋄"
 
@@ -120,232 +233,128 @@ instance {α : Type} [ToString α] : ToString (SymbolExt α) where
     | SymbolExt.marker => "⋆"
     | SymbolExt.endMarker => "⋄"
 
-def leftInterleave {α : Type} (l : List α) : List (SymbolExt α) :=
-  l.flatMap (fun x => [⋆, ↑(x: α)])
+/-! ### Interleaving functions
 
-#eval leftInterleave ['a', 'b', 'c']
--- Output: [⋆, ↑'a', ⋆, ↑'b', ⋆, ↑'c']
+The two interleaving functions are *duals*:
 
+| Function         | Pattern per symbol `a` |
+|------------------|------------------------|
+| `topInterleave`  | `⋆ · ↑ₛa`             |
+| `botInterleave`  | `↑ₛa · ⋆`             |
 
-def rightInterleave {α : Type} (l : List α) : List (SymbolExt α) :=
-  l.flatMap (fun x => [↑(x : α), ⋆])
+This means a top-interleaved string `⋆a₁⋆a₂…` and a bottom-interleaved string
+`a₁⋆a₂⋆…` can only be equal if both source words are equal — the key invariant
+used in the correctness proof. -/
 
-#eval rightInterleave ['a', 'b', 'c']
+/-- Interleave `⋆` **before** each symbol: `[a, b, c] ↦ [⋆, a, ⋆, b, ⋆, c]`. -/
 
--- The start tile matches the MPCP first tile but adds the extra marker on the bottom
--- Normal tiles interleave right on top (y_i), left on bottom (z_i)
-def liftTile {α : Type} (t : Tile α) : Tile (SymbolExt α) :=
-{ top    := rightInterleave t.top,
-  bottom := leftInterleave t.bottom }
+def topInterleave (l : List α) : List (SymbolExt α) :=
+  l.flatMap fun x => [⋆, ↑ₛx]
 
-#eval liftTile ⟨['a', 'c'], ['b', 'd']⟩
+/-- Interleave `⋆` **after** each symbol: `[a, b, c] ↦ [a, ⋆, b, ⋆, c, ⋆]`. -/
+def botInterleave (l : List α) : List (SymbolExt α) :=
+  l.flatMap fun x => [↑ₛx, ⋆]
 
--- The start tile adds the extra marker on the top to match y_0 = *y_1
-def startTile {α : Type} (P : MPCP_Instance α) : Tile (SymbolExt α) :=
-{ top    := SymbolExt.marker :: rightInterleave P.first.top,
-  bottom := leftInterleave P.first.bottom }
+-- Sanity checks.
+#eval topInterleave ['a', 'b', 'c']
+-- [⋆, 'a', ⋆, 'b', ⋆, 'c']
+#eval botInterleave ['a', 'b', 'c']
+-- ['a', ⋆, 'b', ⋆, 'c', ⋆]
 
-#eval startTile ⟨⟨['d','e'],['x','y']⟩, [⟨['a','c'], ['e','f']⟩]⟩
-
--- The end tile caps off the sequence with y_{k+1} = $ and z_{k+1} = *$
-def endTile {α : Type} : Tile (SymbolExt α) :=
-{ top    := [SymbolExt.endMarker],
-  bottom := [SymbolExt.marker, SymbolExt.endMarker] }
-
-#eval (endTile: Tile (SymbolExt Nat))
-
-
--- The full PCP PCP_Instance
-/- Note that the startTile and endTile come from the SymbolExt of α, P is an MPCP instance means it has a list of tiles, along with a specific tile marked as end. The following function transforms a list of tiles in MPCP (which excludes the start and endTiles, to the list of Tiles, not the solution)-/
-def MPCP_to_PCP {α : Type} (P : MPCP_Instance α) : List (Tile (SymbolExt α)) :=
-  startTile P ::
-  endTile ::
-  liftTile P.first ::
-  List.map liftTile P.rest
-
+/-! #### Simp lemmas for interleaving -/
 
 @[simp]
-lemma concatTop_cons {α} (P : PCP_Instance α) (i : Fin P.length) (is : List (Fin P.length)) :
-  concatTop P (i :: is) = (P.get i).top ++ concatTop P is := by
-  simp [concatTop, List.flatMap]
+theorem topInterleave_nil : topInterleave ([] : List α) = [] := rfl
 
 @[simp]
-lemma concatTop_append {α} (P : PCP_Instance α) (l1 l2 : List (Fin P.length)) :
-  concatTop P (l1 ++ l2) = concatTop P l1 ++ concatTop P l2 := by
-  simp[concatTop]
+theorem botInterleave_nil : botInterleave ([] : List α) = [] := rfl
 
 @[simp]
-lemma concatBot_cons {α} (P : PCP_Instance α) (i : Fin P.length) (is : List (Fin P.length)) :
-  concatBot P (i :: is) = (P.get i).bottom ++ concatBot P is := by
-
-  simp [concatBot, List.flatMap]
-
-@[simp]
-lemma concatBot_append {α} (P : PCP_Instance α) (l1 l2 : List (Fin P.length)) :
-  concatBot P (l1 ++ l2) = concatBot P l1 ++ concatBot P l2 := by
-   simp[concatBot]
-
-def shiftIndex {α: Type}
-  (P : MPCP_Instance α)
-  (i : Fin P.rest.length) :
-  Fin (MPCP_to_PCP P).length := ⟨i.val + 3, by
-    -- Get the upper bound of our input index
-    have hi := i.isLt
-    -- Unfold the definition to expose the list length
-    simp [MPCP_to_PCP]
-    -- Let Lean's arithmetic solver handle the inequality
-    ⟩
-
-/- Induction on hidxs-/
-
--- Proves that mapping the shifted indices gives you the interleaved tops of the rest of the tiles
-lemma concatTop_mid_idxs {α : Type} (P : MPCP_Instance α) (hidxs : List (Fin P.rest.length)) :
-  concatTop (MPCP_to_PCP P) (hidxs.map (shiftIndex P)) =
-  rightInterleave (hidxs.flatMap (fun i => (P.rest.get i).top)) := by
-  induction hidxs with
-  |nil => simp[concatTop, rightInterleave]
-  |cons x xs ih =>
-    simp[concatTop, rightInterleave, MPCP_to_PCP, shiftIndex, liftTile] at *
-    simp[ih]
-
-
-
-
- -- Usually proven by induction on hidxs
-
--- Proves the same for the bottoms
-lemma concatBot_mid_idxs {α : Type} (P : MPCP_Instance α) (hidxs : List (Fin P.rest.length)) :
-  concatBot (MPCP_to_PCP P) (hidxs.map (shiftIndex P)) =
-  leftInterleave (hidxs.flatMap (fun i => (P.rest.get i).bottom)) := by
- induction hidxs with
-  |nil => simp[concatBot, leftInterleave]
-  |cons x xs ih =>
-    simp[concatBot, leftInterleave, MPCP_to_PCP, shiftIndex, liftTile] at *
-    simp[ih]
-
-
-
-lemma length_MPCP_to_PCP (α: Type) (P : MPCP_Instance α) :
-  (MPCP_to_PCP P).length = P.rest.length + 3 :=
-by
-  simp [MPCP_to_PCP]
+theorem topInterleave_cons (a : α) (l : List α) :
+    topInterleave (a :: l) = ⋆ :: ↑ₛa :: topInterleave l := by
+  simp [topInterleave]
 
 @[simp]
-lemma leftInterleave_append {α : Type} (l1 l2 : List α) :
-  leftInterleave (l1 ++ l2) = leftInterleave l1 ++ leftInterleave l2 := by
-  simp [leftInterleave, List.flatMap_append]
+theorem botInterleave_cons (a : α) (l : List α) :
+    botInterleave (a :: l) = ↑ₛa :: ⋆ :: botInterleave l := by
+  simp [botInterleave]
 
 @[simp]
-lemma rightInterleave_append {α : Type} (l1 l2 : List α) :
-  rightInterleave (l1 ++ l2) = rightInterleave l1 ++ rightInterleave l2 := by
-  simp [rightInterleave, List.flatMap_append]
+theorem topInterleave_append (l₁ l₂ : List α) :
+    topInterleave (l₁ ++ l₂) = topInterleave l₁ ++ topInterleave l₂ := by
+  simp [topInterleave, List.flatMap_append]
 
--- The core mathematical trick of the reduction
-lemma marker_right_eq_left_marker {α : Type} (l : List α) :
-  [SymbolExt.marker] ++ rightInterleave l = leftInterleave l ++ [SymbolExt.marker] := by
-  induction l with
-  | nil => rfl
-  | cons hd tl ih =>
-    simp [leftInterleave, rightInterleave]
-    -- Group the lists to use the inductive hypothesis
-    have h : [SymbolExt.marker, SymbolExt.old hd, SymbolExt.marker] ++ rightInterleave tl =
-             [SymbolExt.marker, SymbolExt.old hd] ++ ([SymbolExt.marker] ++ rightInterleave tl) := by simp
-    exact List.reverse_inj.mp (congrArg List.reverse ih)
+@[simp]
+theorem botInterleave_append (l₁ l₂ : List α) :
+    botInterleave (l₁ ++ l₂) = botInterleave l₁ ++ botInterleave l₂ := by
+  simp [botInterleave, List.flatMap_append]
 
-theorem mpcp_to_pcp_correct {α : Type}
-  (P : MPCP_Instance α) :
-  MHasSolution P ↔
-  HasSolution (MPCP_to_PCP P) := by
-  constructor
-  intro h
-  unfold MHasSolution at h
-  unfold HasSolution IsSolution
-  rcases h with ⟨hidxs, hi⟩
-  unfold NMconcatTop NMconcatBottom at hi
-  -- 1. Define your specific index pointers (adjust the proofs `by ...` based on your exact list length)
-  let start_idx : Fin (MPCP_to_PCP P).length := ⟨0, by simp [MPCP_to_PCP]⟩
-  let end_idx : Fin (MPCP_to_PCP P).length := ⟨1, by simp [MPCP_to_PCP]⟩
+/-! ## The MPCP → PCP reduction
 
-  -- 2. Shift the MPCP indices to point to the correct translated tiles
-  let mid_idxs := hidxs.map (shiftIndex P)
+Given MPCP instance `M` (with tiles `t₀, t₁, …, tₙ` and start tile `t₀`), we
+build a PCP instance over `SymbolExt α` with the following tiles:
 
-  -- 3. Construct the full PCP solution sequence
-  let pcp_idxs := start_idx :: ((mid_idxs) ++ [end_idx])
+| Role              | Top                            | Bottom                          |
+|-------------------|--------------------------------|---------------------------------|
+| Start tile `t₀`   | `⋆ · topInterleave t₀.top`    | `botInterleave t₀.bot`          |
+| Regular tile `tᵢ` | `topInterleave tᵢ.top`        | `botInterleave tᵢ.bot`          |
+| End tile          | `[⋆, ⋄]`                      | `[⋄]`                           |
 
-  -- Provide this sequence to the existential goal
-  use pcp_idxs
+The start tile is given an extra leading `⋆` so that the top string always
+starts one marker ahead of the bottom — the only way to close the gap is with
+the end tile. -/
 
-  -- Split the AND goal (idxs ≠ [] ∧ concatTop = concatBot)
-  constructor
-  · simp
+/-- Translate a single tile for use in the middle of a solution (regular role). -/
+def regularTile (t : Tile α) : Tile (SymbolExt α) where
+  top := topInterleave t.top
+  bot := botInterleave t.bot
 
-  · sorry
-  · sorry
-/-
-    simp [pcp_idxs, concatTop_cons, concatBot_cons, concatTop_append, concatBot_append]
-    simp [start_idx, end_idx, MPCP_to_PCP, startTile, endTile]
-    simp [concatTop, concatBot, List.flatMap_nil]
-    change ⋆ :: (rightInterleave P.first.top ++ (concatTop (MPCP_to_PCP P) (hidxs.map (shiftIndex P)) ++ [⋄])) =
-           leftInterleave P.first.bottom ++ (concatBot (MPCP_to_PCP P) (hidxs.map (shiftIndex P)) ++ [⋆, ⋄])
-    rw [concatTop_mid_idxs, concatBot_mid_idxs]
-    sorry
+/-- Translate the designated start tile (given an extra leading `⋆` on top). -/
+def startTile (t : Tile α) : Tile (SymbolExt α) where
+  top := ⋆ :: topInterleave t.top
+  bot := botInterleave t.bot
 
-    apply (concatTop_cons (startTile P :: endTile :: liftTile P.first :: List.map liftTile P.rest) (0 :: (mid_idxs ++ [end_idx])))
-    simp[concatBot_cons]
-    sorry
+/-- The end tile closes a solution: top = `[⋆, ⋄]`, bottom = `[⋄]`. -/
+def endTile : Tile (SymbolExt α) where
+  top := [⋆, ⋄]
+  bot := [⋄]
 
-  · -- Goal 1: Prove it's not empty
-    intro contra
-    sorry -- or `simp` / `decide` depending on your setup, since a `::` list is never empty
+/-- Build the PCP instance corresponding to an MPCP instance `M`.
 
-  · -- Goal 2: Prove concatTop (MPCP_to_PCP P) pcp_idxs = concatBot ...
-    let start : Fin (pcpTiles P).length := ⟨0, by simp [pcpTiles]⟩
-    let first : Fin (pcpTiles P).length := ⟨1, by simp [pcpTiles]⟩
-    let idxs : List (Fin (pcpTiles P).length) := start :: first :: hidxs.map (shiftIndex P)
-    refine ⟨idxs, ?hne, ?heq⟩
-    simp
-    unfold concatTop concatBot MPCP_to_PCP
-    simp[idxs]
-    simp [pcpTiles,
-      start, first,
-      startWrapper,
-      liftTile] at *
+    Layout (indices into the resulting `Instance`):
+    * Index `0`       — the translated start tile.
+    * Indices `1..n`  — the `n` regular tiles (one per tile of `M`).
+    * Index `n+1`     — the end tile.
 
-  repeat
-  (simp [List.append_assoc] at *;
-   simp [List.cons_append] at *)
-  rw [List.cons_append]
-  rw [List.cons.inj]
+    Every MPCP tile appears as both a *regular* tile (usable anywhere in the
+    suffix) and the *start* tile (used exactly once, at position 0). -/
+def mpcp_to_pcp (M : MInstance α) : Instance (SymbolExt α) :=
+  [startTile (M.tiles.get M.startIdx)] ++
+  M.tiles.map regularTile ++
+  [endTile]
 
 
 
+/-! ### Index helpers for `mpcp_to_pcp` -/
 
-simp [pcpTiles,
-      start, first,
-      startWrapper,
-      liftTile,
-      shiftIndex,
-      List.map_append,
-      List.map_flatMap,
-      List.append_assoc] at *
-  have l :=congrArg (List.map SymbolExt.old) hi
-  simp [List.cons_append, List.append_assoc]
-  simpa using l
-  congr
+/-- Number of tiles in the reduced PCP instance. -/
+@[simp]
+theorem mpcp_to_pcp_length (M : MInstance α) :
+    (mpcp_to_pcp M).length = M.tiles.length + 2 := by
+  simp [mpcp_to_pcp]
+
+/-- The first tile of the reduced instance is the start tile. -/
+@[simp]
+theorem mpcp_to_pcp_get_zero (M : MInstance α) :
+    (mpcp_to_pcp M).get ⟨0, by simp⟩ = startTile (M.tiles.get M.startIdx) := by
+  simp [mpcp_to_pcp]
+
+/-- The last tile of the reduced instance is the end tile. -/
+@[simp]
+theorem mpcp_to_pcp_get_last (M : MInstance α) :
+    (mpcp_to_pcp M).get ⟨M.tiles.length + 1, by simp⟩ = endTile := by
+  simp [mpcp_to_pcp]
 
 
-  unfold pcpTiles
-  simp [pcpTiles, startWrapper, liftTile]
-  have l:= congrArg (List.map SymbolExt.old) hi
-  simp [pcpTiles] at *
 
-  simp [List.map_append, List.map_flatMap]
-
-  have len_eq: ([startWrapper P] ++ liftTile P.first :: List.map liftTile P.rest).length = (P.rest.length + 2) := by
-    simp
-
-  sorry
-  sorry
-
--/
-#eval 1 + 2
+end PCP
