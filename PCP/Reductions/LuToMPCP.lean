@@ -1411,4 +1411,184 @@ lemma absorbAndFinish_subset_luTiles (tm : SingleTapeTM Symbol)
     · exact stepTilesAbsorbLeft_subset_luTiles tm l rest right tile hL
     · exact ih hR
 
+/-! ## Dispatch over a single TM step
+
+Given a running configuration `⟨some q, t⟩`, this section produces the
+corresponding tile sequence and proves its `tau1`/`tau2`/membership
+properties — dispatching on the direction and on the relevant
+emptiness sub-case. The `tau2 = encodeCfg(post-step) ++ [#]`
+identity holds under `NoBlankWrites`, which sidesteps the cslib
+`StackTape.cons` blank-stripping degenerate sub-case where the TM
+writes a blank and the corresponding side of the tape is empty. -/
+
+/-- A TM is *blank-write free* iff its transition function never writes
+    the blank symbol. This sidesteps the cslib `BiTape` stripping
+    issue that arises in the `Lu ≤_m MPCP` simulation when a blank is
+    written into a previously-empty boundary side. -/
+def NoBlankWrites (tm : SingleTapeTM Symbol) : Prop :=
+  ∀ q : tm.State, ∀ a : Option Symbol, ((tm.tr q a).1).symbol ≠ none
+
+/-- The configuration reached by a single TM step from `⟨some q, t⟩`. -/
+def stepResult (tm : SingleTapeTM Symbol) (q : tm.State) (t : BiTape Symbol) :
+    tm.Cfg :=
+  ⟨(tm.tr q t.head).2,
+    (t.write (tm.tr q t.head).1.symbol).optionMove (tm.tr q t.head).1.movement⟩
+
+@[simp] lemma tm_step_running (tm : SingleTapeTM Symbol) (q : tm.State)
+    (t : BiTape Symbol) :
+    tm.step ⟨some q, t⟩ = some (stepResult tm q t) := by
+  simp only [SingleTapeTM.step, stepResult]
+
+/-- Auxiliary dispatcher: given the destructured pieces of one TM step
+    `(w, mov, qNew)` (the symbol to write, the direction, and the new
+    state) plus the current tape `t`, produce the simulation tile
+    sequence. -/
+def stepTilesAux (tm : SingleTapeTM Symbol) (q : tm.State) (t : BiTape Symbol)
+    (w : Option Symbol) (mov : Option Dir) (qNew : Option tm.State) :
+    Stack (Alpha tm.State Symbol) :=
+  match mov with
+  | none           => stepTilesNoMove tm q qNew t w
+  | some Dir.right =>
+      match t.right.toList with
+      | []       => stepTilesRightBoundary tm q qNew t w
+      | _ :: _   => stepTilesRightInterior tm q qNew t w
+  | some Dir.left  =>
+      match t.left.toList with
+      | []       => stepTilesLeftBoundary tm q qNew t w
+      | _ :: _   => stepTilesLeftInterior tm q qNew t w
+
+/-- The simulation tile sequence for one running TM step. -/
+def stepTiles (tm : SingleTapeTM Symbol) (q : tm.State) (t : BiTape Symbol) :
+    Stack (Alpha tm.State Symbol) :=
+  stepTilesAux tm q t (tm.tr q t.head).1.symbol
+    (tm.tr q t.head).1.movement (tm.tr q t.head).2
+
+/-! ### Lemmas about `stepTilesAux`
+
+These lemmas dispatch on the explicit `mov` parameter and the relevant
+emptiness sub-case. Because `mov`, `t.left.toList`, and `t.right.toList`
+are simple types (`Option Dir`, `List _`), case analysis is direct. -/
+
+lemma tau1_stepTilesAux (tm : SingleTapeTM Symbol) (q : tm.State)
+    (t : BiTape Symbol) (w : Option Symbol) (mov : Option Dir)
+    (qNew : Option tm.State) :
+    tau1 (stepTilesAux tm q t w mov qNew) = encodeRunningCfg tm q t ++ [#] := by
+  unfold stepTilesAux
+  cases mov with
+  | none => exact tau1_stepTilesNoMove tm q qNew t w
+  | some dir =>
+    cases dir with
+    | right =>
+      cases h_right : t.right.toList with
+      | nil => exact tau1_stepTilesRightBoundary tm q qNew t w h_right
+      | cons _ _ => exact tau1_stepTilesRightInterior tm q qNew t w
+    | left =>
+      cases h_left : t.left.toList with
+      | nil => exact tau1_stepTilesLeftBoundary tm q qNew t w h_left
+      | cons _ _ =>
+        refine tau1_stepTilesLeftInterior tm q qNew t w ?_
+        rw [h_left]; exact List.cons_ne_nil _ _
+
+lemma stepTilesAux_subset_luTiles (tm : SingleTapeTM Symbol) (q : tm.State)
+    (a : Option Symbol) (t : BiTape Symbol) (w : Option Symbol)
+    (mov : Option Dir) (qNew : Option tm.State)
+    (htr : tm.tr q a = (⟨w, mov⟩, qNew))
+    (hhead : t.head = a)
+    (tile : Tile (Alpha tm.State Symbol))
+    (htile : tile ∈ stepTilesAux tm q t w mov qNew) :
+    tile ∈ luTiles tm := by
+  unfold stepTilesAux at htile
+  cases mov with
+  | none => exact stepTilesNoMove_subset_luTiles tm q a qNew t w htr hhead tile htile
+  | some dir =>
+    cases dir with
+    | right =>
+      cases h_right : t.right.toList with
+      | nil =>
+        rw [h_right] at htile
+        exact stepTilesRightBoundary_subset_luTiles tm q a qNew t w htr hhead tile htile
+      | cons _ _ =>
+        rw [h_right] at htile
+        exact stepTilesRightInterior_subset_luTiles tm q a qNew t w htr hhead tile htile
+    | left =>
+      cases h_left : t.left.toList with
+      | nil =>
+        rw [h_left] at htile
+        exact stepTilesLeftBoundary_subset_luTiles tm q a qNew t w htr hhead tile htile
+      | cons _ _ =>
+        rw [h_left] at htile
+        exact stepTilesLeftInterior_subset_luTiles tm q a qNew t w htr hhead tile htile
+
+lemma tau2_stepTilesAux (tm : SingleTapeTM Symbol) (q : tm.State)
+    (t : BiTape Symbol) (w : Option Symbol) (mov : Option Dir)
+    (qNew : Option tm.State) (h_w_ne : w ≠ none) :
+    tau2 (stepTilesAux tm q t w mov qNew) =
+      encodeCfg tm ⟨qNew, (t.write w).optionMove mov⟩ ++ [#] := by
+  unfold stepTilesAux
+  cases mov with
+  | none =>
+    -- optionMove _ none = id; new tape is t.write w
+    rw [tau2_stepTilesNoMove]
+    show _ = encodeCfg tm ⟨qNew, t.write w⟩ ++ [#]
+    cases qNew with
+    | none =>
+      simp only [encodeCfg_halted, encodeHaltedCfg, BiTape.write,
+                 stateMarker_none, liftTape_cons, List.append_assoc,
+                 List.cons_append, List.nil_append]
+    | some q' =>
+      simp only [encodeCfg_running, encodeRunningCfg, BiTape.write,
+                 stateMarker_some, liftTape_cons, List.append_assoc,
+                 List.cons_append, List.nil_append]
+  | some dir =>
+    cases dir with
+    | right =>
+      cases h_right : t.right.toList with
+      | nil =>
+        exact tau2_stepTilesRightBoundary_eq_encodeCfg tm q qNew t w
+          (Or.inl h_w_ne) h_right
+      | cons _ _ =>
+        refine tau2_stepTilesRightInterior_eq_encodeCfg tm q qNew t w
+          (Or.inl h_w_ne) ?_
+        rw [h_right]; exact List.cons_ne_nil _ _
+    | left =>
+      cases h_left : t.left.toList with
+      | nil =>
+        exact tau2_stepTilesLeftBoundary_eq_encodeCfg tm q qNew t w
+          (Or.inl h_w_ne) h_left
+      | cons _ _ =>
+        exact tau2_stepTilesLeftInterior_eq_encodeCfg tm q qNew t w
+          (Or.inl h_w_ne)
+
+/-! ### Main `stepTiles` lemmas (derived from `stepTilesAux`) -/
+
+/-- The top concatenation of `stepTiles` is the encoded current
+    configuration block. -/
+lemma tau1_stepTiles (tm : SingleTapeTM Symbol) (q : tm.State)
+    (t : BiTape Symbol) :
+    tau1 (stepTiles tm q t) = encodeRunningCfg tm q t ++ [#] := by
+  unfold stepTiles
+  exact tau1_stepTilesAux tm q t _ _ _
+
+/-- Every tile in `stepTiles` is a member of `luTiles`. -/
+lemma stepTiles_subset_luTiles (tm : SingleTapeTM Symbol) (q : tm.State)
+    (t : BiTape Symbol)
+    (tile : Tile (Alpha tm.State Symbol))
+    (htile : tile ∈ stepTiles tm q t) :
+    tile ∈ luTiles tm := by
+  unfold stepTiles at htile
+  -- Provide htr by unfolding the transition products.
+  have htr : tm.tr q t.head =
+      (⟨(tm.tr q t.head).1.symbol, (tm.tr q t.head).1.movement⟩, (tm.tr q t.head).2) := by
+    rcases tm.tr q t.head with ⟨⟨_, _⟩, _⟩; rfl
+  exact stepTilesAux_subset_luTiles tm q t.head t _ _ _ htr rfl tile htile
+
+/-- The bottom concatenation of `stepTiles` is the encoded *next*
+    configuration block. Requires `NoBlankWrites` to rule out the
+    cslib `BiTape` blank-stripping sub-cases. -/
+lemma tau2_stepTiles (tm : SingleTapeTM Symbol) (h_nbw : NoBlankWrites tm)
+    (q : tm.State) (t : BiTape Symbol) :
+    tau2 (stepTiles tm q t) = encodeCfg tm (stepResult tm q t) ++ [#] := by
+  unfold stepTiles stepResult
+  exact tau2_stepTilesAux tm q t _ _ _ (h_nbw q t.head)
+
 end PCP.LuToMPCP
