@@ -794,4 +794,147 @@ lemma tau2_stepTilesRightInterior_eq_encodeCfg (tm : SingleTapeTM Symbol)
   rw [tau2_stepTilesRightInterior,
       encodeCfg_after_right_move_eq tm qNew t w h_nondeg h_right_ne]
 
+/-! ## Simulation tiles for one TM step (right-move, boundary case)
+
+When the head is at the right boundary of the encoded window
+(`t.right.toList = []`), the right-move transition uses
+`rightMoveBoundaryTile`, which packages the local rewrite together
+with the closing `#` and the explicit blank for the new head:
+
+  copy l_n … copy l_1   rightMoveBoundaryTile
+
+The boundary tile already contains the closing `#`, so no separate
+`sepTile` is appended. -/
+
+omit [Inhabited Symbol] [Fintype Symbol] in
+/-- The `head` of a `StackTape` whose `toList` is empty is `none`. -/
+lemma head_of_toList_eq_nil (xs : Turing.StackTape Symbol)
+    (h : xs.toList = []) : xs.head = none := by
+  obtain ⟨tl, hLast⟩ := xs
+  simp only at h
+  subst h
+  rfl
+
+omit [Inhabited Symbol] [Fintype Symbol] in
+/-- The `tail` of an empty `StackTape` is also empty. -/
+lemma tail_toList_of_toList_eq_nil (xs : Turing.StackTape Symbol)
+    (h : xs.toList = []) : xs.tail.toList = [] := by
+  obtain ⟨tl, hLast⟩ := xs
+  simp only at h
+  subst h
+  rfl
+
+/-- Tile sequence simulating a single right-move TM step in the
+    *boundary* case (`t.right.toList = []`). -/
+def stepTilesRightBoundary (tm : SingleTapeTM Symbol) (q : tm.State)
+    (qNew : Option tm.State) (t : BiTape Symbol) (w : Option Symbol) :
+    List (Tile (Alpha tm.State Symbol)) :=
+  (t.left.toList.reverse.map (copyTile tm)) ++
+  [rightMoveBoundaryTile tm q t.head qNew w]
+
+@[simp] lemma rightMoveBoundaryTile_top (tm : SingleTapeTM Symbol)
+    (q : tm.State) (a : Option Symbol) (qNew : Option tm.State)
+    (w : Option Symbol) :
+    (rightMoveBoundaryTile tm q a qNew w).top = [↟ₛq, ↟ₜa, #] := rfl
+
+@[simp] lemma rightMoveBoundaryTile_bot (tm : SingleTapeTM Symbol)
+    (q : tm.State) (a : Option Symbol) (qNew : Option tm.State)
+    (w : Option Symbol) :
+    (rightMoveBoundaryTile tm q a qNew w).bot =
+      [↟ₜw, stateMarker tm qNew, ↟ₜ(none : Option Symbol), #] := rfl
+
+/-- The top concatenation of `stepTilesRightBoundary` reproduces the
+    *current* configuration block. The hypothesis
+    `t.right.toList = []` is used to simplify the encoding (no right
+    symbols to copy after the transition tile). -/
+lemma tau1_stepTilesRightBoundary (tm : SingleTapeTM Symbol) (q : tm.State)
+    (qNew : Option tm.State) (t : BiTape Symbol) (w : Option Symbol)
+    (h_right_empty : t.right.toList = []) :
+    tau1 (stepTilesRightBoundary tm q qNew t w) =
+      encodeRunningCfg tm q t ++ [#] := by
+  simp only [stepTilesRightBoundary, tau1_append, tau1_cons, tau1_nil,
+             tau1_map_copyTile, rightMoveBoundaryTile_top,
+             List.append_nil, encodeRunningCfg, h_right_empty,
+             liftTape_cons, liftTape_nil]
+  simp [List.append_assoc]
+
+/-- The bottom concatenation of `stepTilesRightBoundary`, in explicit
+    list form. -/
+lemma tau2_stepTilesRightBoundary (tm : SingleTapeTM Symbol) (q : tm.State)
+    (qNew : Option tm.State) (t : BiTape Symbol) (w : Option Symbol) :
+    tau2 (stepTilesRightBoundary tm q qNew t w) =
+      liftTape tm t.left.toList.reverse ++
+      [↟ₜw, stateMarker tm qNew, ↟ₜ(none : Option Symbol), #] := by
+  simp only [stepTilesRightBoundary, tau2_append, tau2_cons, tau2_nil,
+             tau2_map_copyTile, rightMoveBoundaryTile_bot,
+             List.append_nil]
+
+/-- Every tile in `stepTilesRightBoundary` is a member of `luTiles`. -/
+lemma stepTilesRightBoundary_subset_luTiles (tm : SingleTapeTM Symbol)
+    (q : tm.State) (a : Option Symbol) (qNew : Option tm.State)
+    (t : BiTape Symbol) (w : Option Symbol)
+    (htr : tm.tr q a = (⟨w, some Dir.right⟩, qNew))
+    (hhead : t.head = a)
+    (tile : Tile (Alpha tm.State Symbol))
+    (htile : tile ∈ stepTilesRightBoundary tm q qNew t w) :
+    tile ∈ luTiles tm := by
+  simp only [stepTilesRightBoundary, List.mem_append, List.mem_cons,
+             List.not_mem_nil, or_false] at htile
+  rcases htile with hl | rfl
+  · -- copy of a left symbol
+    exact map_copyTile_subset_luTiles tm _ tile hl
+  · -- the right-move boundary tile
+    refine transitionTile_mem_luTiles tm q a _ ?_
+    simp only [transitionTilesFor]
+    rw [show tm.tr q a = (⟨w, some Dir.right⟩, qNew) from htr]
+    subst hhead
+    exact List.mem_cons_of_mem _ List.mem_cons_self
+
+/-- The encoding of the configuration after one right-move step at
+    the right boundary, in the non-degenerate case. -/
+lemma encodeCfg_after_right_move_boundary_eq (tm : SingleTapeTM Symbol)
+    (qNew : Option tm.State) (t : BiTape Symbol) (w : Option Symbol)
+    (h_nondeg : w ≠ none ∨ t.left.toList ≠ [])
+    (h_right_empty : t.right.toList = []) :
+    encodeCfg tm ⟨qNew, (t.write w).move_right⟩ =
+      liftTape tm t.left.toList.reverse ++
+      [↟ₜw, stateMarker tm qNew, ↟ₜ(none : Option Symbol)] := by
+  have h_left :
+      ((t.write w).move_right).left.toList = w :: t.left.toList := by
+    show (Turing.StackTape.cons _ _).toList = _
+    exact cons_toList_of_nondeg w t.left h_nondeg
+  have h_head : ((t.write w).move_right).head = none := by
+    show t.right.head = _
+    exact head_of_toList_eq_nil _ h_right_empty
+  have h_right :
+      ((t.write w).move_right).right.toList = [] := by
+    show t.right.tail.toList = _
+    exact tail_toList_of_toList_eq_nil _ h_right_empty
+  cases qNew with
+  | none =>
+    show encodeHaltedCfg tm _ = _
+    simp only [encodeHaltedCfg, h_left, h_head, h_right,
+               List.reverse_cons, liftTape_append, liftTape_cons,
+               liftTape_nil, stateMarker_none]
+    simp [List.append_assoc]
+  | some q' =>
+    show encodeRunningCfg tm q' _ = _
+    simp only [encodeRunningCfg, h_left, h_head, h_right,
+               List.reverse_cons, liftTape_append, liftTape_cons,
+               liftTape_nil, stateMarker_some]
+    simp [List.append_assoc]
+
+/-- Combined statement: in the non-degenerate right-move boundary
+    case, `tau2 = encodeCfg(post-step config) ++ [#]`. -/
+lemma tau2_stepTilesRightBoundary_eq_encodeCfg (tm : SingleTapeTM Symbol)
+    (q : tm.State) (qNew : Option tm.State)
+    (t : BiTape Symbol) (w : Option Symbol)
+    (h_nondeg : w ≠ none ∨ t.left.toList ≠ [])
+    (h_right_empty : t.right.toList = []) :
+    tau2 (stepTilesRightBoundary tm q qNew t w) =
+      encodeCfg tm ⟨qNew, (t.write w).move_right⟩ ++ [#] := by
+  rw [tau2_stepTilesRightBoundary,
+      encodeCfg_after_right_move_boundary_eq tm qNew t w h_nondeg h_right_empty]
+  simp [List.append_assoc]
+
 end PCP.LuToMPCP
