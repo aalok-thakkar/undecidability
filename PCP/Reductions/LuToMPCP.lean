@@ -1212,4 +1212,139 @@ lemma tau2_stepTilesLeftBoundary_eq_encodeCfg (tm : SingleTapeTM Symbol)
   rw [tau2_stepTilesLeftBoundary,
       encodeCfg_after_left_move_boundary_eq tm qNew t w h_nondeg h_left_empty]
 
+/-! ## Halt-absorption phase
+
+After the TM halts the lookahead in `bot` ends with the encoded halt
+configuration
+
+  `[l_n … l_1, h⊥, head, r_1 … r_m, #]`.
+
+We catch `top` up by repeatedly applying *absorb-left* and
+*absorb-right* iterations, each shrinking the encoded window by
+exactly one tape symbol. After all `n + (m+1)` iterations the
+remaining lookahead is `[h⊥, #]`, which the `finalTile` then closes:
+`(h⊥ # #, #)` makes `top` and `bot` equal.
+
+Because the absorption phase eventually shrinks past the BiTape head
+itself (which always has a value, even when blank), it is cleanest to
+parameterise the iteration on raw `List (Option Symbol)` rather than
+on `BiTape`. -/
+
+/-- The *list-parameterised* halted encoding: `# ... l_n … l_1 h⊥ r ... #`
+    (without the surrounding `#`s; those appear in the calling context). -/
+def encodeHaltList (tm : SingleTapeTM Symbol)
+    (left right : List (Option Symbol)) : List (Alpha tm.State Symbol) :=
+  liftTape tm left.reverse ++ [h⊥] ++ liftTape tm right
+
+/-- Bridge: the BiTape-based halted encoding equals the list-parameterised
+    one with `left = t.left.toList` and `right = t.head :: t.right.toList`. -/
+lemma encodeHaltedCfg_eq_encodeHaltList (tm : SingleTapeTM Symbol)
+    (t : BiTape Symbol) :
+    encodeHaltedCfg tm t =
+      encodeHaltList tm t.left.toList (t.head :: t.right.toList) := by
+  simp [encodeHaltedCfg, encodeHaltList, List.append_assoc]
+
+@[simp] lemma absorbLeftTile_top (tm : SingleTapeTM Symbol) (a : Option Symbol) :
+    (absorbLeftTile tm a).top = [↟ₜa, h⊥] := rfl
+
+@[simp] lemma absorbLeftTile_bot (tm : SingleTapeTM Symbol) (a : Option Symbol) :
+    (absorbLeftTile tm a).bot = [h⊥] := rfl
+
+@[simp] lemma absorbRightTile_top (tm : SingleTapeTM Symbol) (a : Option Symbol) :
+    (absorbRightTile tm a).top = [h⊥, ↟ₜa] := rfl
+
+@[simp] lemma absorbRightTile_bot (tm : SingleTapeTM Symbol) (a : Option Symbol) :
+    (absorbRightTile tm a).bot = [h⊥] := rfl
+
+/-- Tile sequence for one *absorb-left* iteration. Removes the
+    innermost left symbol `l` from the encoding `encodeHaltList (l :: rest) right`,
+    yielding `encodeHaltList rest right`. -/
+def stepTilesAbsorbLeft (tm : SingleTapeTM Symbol)
+    (l : Option Symbol) (rest right : List (Option Symbol)) :
+    List (Tile (Alpha tm.State Symbol)) :=
+  rest.reverse.map (copyTile tm) ++
+  [absorbLeftTile tm l] ++
+  right.map (copyTile tm) ++
+  [sepTile tm]
+
+/-- Tile sequence for one *absorb-right* iteration. Removes the
+    leftmost right symbol `r` from the encoding `encodeHaltList left (r :: rest)`,
+    yielding `encodeHaltList left rest`. -/
+def stepTilesAbsorbRight (tm : SingleTapeTM Symbol)
+    (left : List (Option Symbol)) (r : Option Symbol)
+    (rest : List (Option Symbol)) :
+    List (Tile (Alpha tm.State Symbol)) :=
+  left.reverse.map (copyTile tm) ++
+  [absorbRightTile tm r] ++
+  rest.map (copyTile tm) ++
+  [sepTile tm]
+
+/-! ### `tau1` / `tau2` for one absorption iteration -/
+
+lemma tau1_stepTilesAbsorbLeft (tm : SingleTapeTM Symbol)
+    (l : Option Symbol) (rest right : List (Option Symbol)) :
+    tau1 (stepTilesAbsorbLeft tm l rest right) =
+      encodeHaltList tm (l :: rest) right ++ [#] := by
+  simp only [stepTilesAbsorbLeft, tau1_append, tau1_cons, tau1_nil,
+             tau1_map_copyTile, absorbLeftTile_top, sepTile_top,
+             List.append_nil, encodeHaltList,
+             List.reverse_cons, liftTape_append, liftTape_cons, liftTape_nil]
+  simp [List.append_assoc]
+
+lemma tau2_stepTilesAbsorbLeft (tm : SingleTapeTM Symbol)
+    (l : Option Symbol) (rest right : List (Option Symbol)) :
+    tau2 (stepTilesAbsorbLeft tm l rest right) =
+      encodeHaltList tm rest right ++ [#] := by
+  simp only [stepTilesAbsorbLeft, tau2_append, tau2_cons, tau2_nil,
+             tau2_map_copyTile, absorbLeftTile_bot, sepTile_bot,
+             List.append_nil, encodeHaltList]
+
+lemma tau1_stepTilesAbsorbRight (tm : SingleTapeTM Symbol)
+    (left : List (Option Symbol)) (r : Option Symbol)
+    (rest : List (Option Symbol)) :
+    tau1 (stepTilesAbsorbRight tm left r rest) =
+      encodeHaltList tm left (r :: rest) ++ [#] := by
+  simp only [stepTilesAbsorbRight, tau1_append, tau1_cons, tau1_nil,
+             tau1_map_copyTile, absorbRightTile_top, sepTile_top,
+             List.append_nil, encodeHaltList, liftTape_cons]
+  simp [List.append_assoc]
+
+lemma tau2_stepTilesAbsorbRight (tm : SingleTapeTM Symbol)
+    (left : List (Option Symbol)) (r : Option Symbol)
+    (rest : List (Option Symbol)) :
+    tau2 (stepTilesAbsorbRight tm left r rest) =
+      encodeHaltList tm left rest ++ [#] := by
+  simp only [stepTilesAbsorbRight, tau2_append, tau2_cons, tau2_nil,
+             tau2_map_copyTile, absorbRightTile_bot, sepTile_bot,
+             List.append_nil, encodeHaltList]
+
+/-! ### Membership of absorption iterations in `luTiles` -/
+
+lemma stepTilesAbsorbLeft_subset_luTiles (tm : SingleTapeTM Symbol)
+    (l : Option Symbol) (rest right : List (Option Symbol))
+    (tile : Tile (Alpha tm.State Symbol))
+    (htile : tile ∈ stepTilesAbsorbLeft tm l rest right) :
+    tile ∈ luTiles tm := by
+  simp only [stepTilesAbsorbLeft, List.mem_append, List.mem_cons,
+             List.not_mem_nil, or_false] at htile
+  rcases htile with ((hl | rfl) | hr) | rfl
+  · exact map_copyTile_subset_luTiles tm _ tile hl
+  · exact absorbLeftTile_mem_luTiles tm l
+  · exact map_copyTile_subset_luTiles tm _ tile hr
+  · exact sepTile_mem_luTiles tm
+
+lemma stepTilesAbsorbRight_subset_luTiles (tm : SingleTapeTM Symbol)
+    (left : List (Option Symbol)) (r : Option Symbol)
+    (rest : List (Option Symbol))
+    (tile : Tile (Alpha tm.State Symbol))
+    (htile : tile ∈ stepTilesAbsorbRight tm left r rest) :
+    tile ∈ luTiles tm := by
+  simp only [stepTilesAbsorbRight, List.mem_append, List.mem_cons,
+             List.not_mem_nil, or_false] at htile
+  rcases htile with ((hl | rfl) | hr) | rfl
+  · exact map_copyTile_subset_luTiles tm _ tile hl
+  · exact absorbRightTile_mem_luTiles tm r
+  · exact map_copyTile_subset_luTiles tm _ tile hr
+  · exact sepTile_mem_luTiles tm
+
 end PCP.LuToMPCP
