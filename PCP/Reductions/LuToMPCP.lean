@@ -610,4 +610,188 @@ lemma stepTilesNoMove_subset_luTiles (tm : SingleTapeTM Symbol)
   · -- the separator tile
     exact sepTile_mem_luTiles tm
 
+/-! ## Simulation tiles for one TM step (right-move, interior case)
+
+For a TM step `tm.tr q t.head = (⟨w, some right⟩, qNew)` where
+`t.right.toList ≠ []` (the head is not at the right boundary of the
+encoded window), the simulation tile sequence is:
+
+  copy l_n … copy l_1   rightMoveTile   copy r_1 … copy r_m   sepTile
+
+The `tau1` reproduces the *current* configuration block (modulo the
+leading `#` shared with the previous block). The `tau2` extends
+`bot` by an explicit list expression which agrees with
+`encodeCfg(next config) ++ [#]` whenever the move does not run into
+the cslib `StackTape.cons` blank-stripping degenerate case
+(`w = none ∧ t.left.toList = []`). -/
+
+/-- Tile sequence simulating a single right-move TM step in the
+    *interior* (when `t.right` is non-empty). -/
+def stepTilesRightInterior (tm : SingleTapeTM Symbol) (q : tm.State)
+    (qNew : Option tm.State) (t : BiTape Symbol) (w : Option Symbol) :
+    List (Tile (Alpha tm.State Symbol)) :=
+  (t.left.toList.reverse.map (copyTile tm)) ++
+  [rightMoveTile tm q t.head qNew w] ++
+  (t.right.toList.map (copyTile tm)) ++
+  [sepTile tm]
+
+@[simp] lemma rightMoveTile_top (tm : SingleTapeTM Symbol) (q : tm.State)
+    (a : Option Symbol) (qNew : Option tm.State) (w : Option Symbol) :
+    (rightMoveTile tm q a qNew w).top = [↟ₛq, ↟ₜa] := rfl
+
+@[simp] lemma rightMoveTile_bot (tm : SingleTapeTM Symbol) (q : tm.State)
+    (a : Option Symbol) (qNew : Option tm.State) (w : Option Symbol) :
+    (rightMoveTile tm q a qNew w).bot = [↟ₜw, stateMarker tm qNew] := rfl
+
+/-- The top concatenation of `stepTilesRightInterior` reproduces the
+    *current* configuration block — exactly as in the no-move case,
+    since the top side of the transition tile records `q` and the
+    head symbol identically in both cases. -/
+lemma tau1_stepTilesRightInterior (tm : SingleTapeTM Symbol) (q : tm.State)
+    (qNew : Option tm.State) (t : BiTape Symbol) (w : Option Symbol) :
+    tau1 (stepTilesRightInterior tm q qNew t w) =
+      encodeRunningCfg tm q t ++ [#] := by
+  simp only [stepTilesRightInterior, tau1_append, tau1_cons, tau1_nil,
+             tau1_map_copyTile, rightMoveTile_top, sepTile_top,
+             List.append_nil, encodeRunningCfg, liftTape_cons]
+  simp [List.append_assoc]
+
+/-- The bottom concatenation of `stepTilesRightInterior`, in explicit
+    list form. The connection to `encodeCfg` of the post-step
+    configuration requires non-degeneracy
+    (`w = some _ ∨ t.left.toList ≠ []`) — see
+    `encodeCfg_after_right_move_eq` below. -/
+lemma tau2_stepTilesRightInterior (tm : SingleTapeTM Symbol) (q : tm.State)
+    (qNew : Option tm.State) (t : BiTape Symbol) (w : Option Symbol) :
+    tau2 (stepTilesRightInterior tm q qNew t w) =
+      liftTape tm t.left.toList.reverse ++
+      [↟ₜw, stateMarker tm qNew] ++
+      liftTape tm t.right.toList ++
+      [#] := by
+  simp only [stepTilesRightInterior, tau2_append, tau2_cons, tau2_nil,
+             tau2_map_copyTile, rightMoveTile_bot, sepTile_bot,
+             List.append_nil]
+
+/-- Every tile in `stepTilesRightInterior` is a member of `luTiles`. -/
+lemma stepTilesRightInterior_subset_luTiles (tm : SingleTapeTM Symbol)
+    (q : tm.State) (a : Option Symbol) (qNew : Option tm.State)
+    (t : BiTape Symbol) (w : Option Symbol)
+    (htr : tm.tr q a = (⟨w, some Dir.right⟩, qNew))
+    (hhead : t.head = a)
+    (tile : Tile (Alpha tm.State Symbol))
+    (htile : tile ∈ stepTilesRightInterior tm q qNew t w) :
+    tile ∈ luTiles tm := by
+  simp only [stepTilesRightInterior, List.mem_append, List.mem_cons,
+             List.not_mem_nil, or_false] at htile
+  rcases htile with ((hl | rfl) | hr) | rfl
+  · -- copy of a left symbol
+    exact map_copyTile_subset_luTiles tm _ tile hl
+  · -- the transition tile itself
+    refine transitionTile_mem_luTiles tm q a _ ?_
+    simp only [transitionTilesFor]
+    rw [show tm.tr q a = (⟨w, some Dir.right⟩, qNew) from htr]
+    subst hhead
+    exact List.mem_cons_self
+  · -- copy of a right symbol
+    exact map_copyTile_subset_luTiles tm _ tile hr
+  · -- the separator tile
+    exact sepTile_mem_luTiles tm
+
+/-! ### Connecting `tau2_stepTilesRightInterior` to `encodeCfg` of the
+    post-step configuration (non-degenerate case). -/
+
+omit [Inhabited Symbol] [Fintype Symbol] in
+/-- In the non-degenerate case (`w ≠ none ∨ xs.toList ≠ []`),
+    the cslib `StackTape.cons` does *not* strip blanks, so the new
+    `toList` is exactly `w :: xs.toList`. -/
+lemma cons_toList_of_nondeg (w : Option Symbol)
+    (xs : Turing.StackTape Symbol)
+    (h : w ≠ none ∨ xs.toList ≠ []) :
+    (Turing.StackTape.cons w xs).toList = w :: xs.toList := by
+  obtain ⟨tl, hLast⟩ := xs
+  cases tl with
+  | nil =>
+    cases w with
+    | none =>
+      rcases h with h | h
+      · exact absurd rfl h
+      · exact absurd rfl h
+    | some s => rfl
+  | cons hd tl' =>
+    cases w with
+    | none => rfl
+    | some _ => rfl
+
+omit [Inhabited Symbol] [Fintype Symbol] in
+/-- For a non-empty `StackTape`, `head :: tail.toList = toList`. This
+    is the `toList`-projection of cslib's `cons_head_tail`, valid
+    whenever `xs.toList` is non-empty (so that `cons xs.head xs.tail`
+    does not degenerate). -/
+lemma head_cons_tail_toList (xs : Turing.StackTape Symbol)
+    (h : xs.toList ≠ []) :
+    xs.head :: xs.tail.toList = xs.toList := by
+  obtain ⟨tl, hLast⟩ := xs
+  cases tl with
+  | nil => exact absurd rfl h
+  | cons a rest => rfl
+
+/-- Lifted form of `head_cons_tail_toList`: when `xs.toList ≠ []`,
+    rewriting `↟ₜxs.head :: liftTape tm xs.tail.toList` to
+    `liftTape tm xs.toList`. -/
+lemma liftTape_head_cons_tail_toList (tm : SingleTapeTM Symbol)
+    (xs : Turing.StackTape Symbol) (h : xs.toList ≠ []) :
+    ↟ₜxs.head :: liftTape tm xs.tail.toList = liftTape tm xs.toList := by
+  rw [show (↟ₜxs.head : Alpha tm.State Symbol) :: liftTape tm xs.tail.toList
+       = liftTape tm (xs.head :: xs.tail.toList) from rfl,
+      head_cons_tail_toList _ h]
+
+/-- The encoding of the configuration after one right-move step,
+    in the non-degenerate case (so the new left side really is
+    `w :: t.left.toList`). -/
+lemma encodeCfg_after_right_move_eq (tm : SingleTapeTM Symbol)
+    (qNew : Option tm.State) (t : BiTape Symbol) (w : Option Symbol)
+    (h_nondeg : w ≠ none ∨ t.left.toList ≠ [])
+    (h_right_ne : t.right.toList ≠ []) :
+    encodeCfg tm ⟨qNew, (t.write w).move_right⟩ =
+      liftTape tm t.left.toList.reverse ++
+      [↟ₜw, stateMarker tm qNew] ++
+      liftTape tm t.right.toList := by
+  -- Unfold the cslib step on the BiTape side.
+  have h_left :
+      ((t.write w).move_right).left.toList = w :: t.left.toList := by
+    show (Turing.StackTape.cons _ _).toList = _
+    exact cons_toList_of_nondeg w t.left h_nondeg
+  have h_head : ((t.write w).move_right).head = t.right.head := rfl
+  have h_right :
+      ((t.write w).move_right).right.toList = t.right.tail.toList := rfl
+  -- Now compute the encoding.
+  cases qNew with
+  | none =>
+    show encodeHaltedCfg tm _ = _
+    simp only [encodeHaltedCfg, h_left, h_head, h_right,
+               List.reverse_cons, liftTape_append, liftTape_cons,
+               liftTape_nil, stateMarker_none]
+    rw [liftTape_head_cons_tail_toList _ _ h_right_ne]
+    simp [List.append_assoc]
+  | some q' =>
+    show encodeRunningCfg tm q' _ = _
+    simp only [encodeRunningCfg, h_left, h_head, h_right,
+               List.reverse_cons, liftTape_append, liftTape_cons,
+               liftTape_nil, stateMarker_some]
+    rw [liftTape_head_cons_tail_toList _ _ h_right_ne]
+    simp [List.append_assoc]
+
+/-- Combined statement: in the non-degenerate, interior right-move
+    case, `tau2 = encodeCfg(post-step config) ++ [#]`, matching the
+    simulation invariant. -/
+lemma tau2_stepTilesRightInterior_eq_encodeCfg (tm : SingleTapeTM Symbol)
+    (q : tm.State) (qNew : Option tm.State)
+    (t : BiTape Symbol) (w : Option Symbol)
+    (h_nondeg : w ≠ none ∨ t.left.toList ≠ [])
+    (h_right_ne : t.right.toList ≠ []) :
+    tau2 (stepTilesRightInterior tm q qNew t w) =
+      encodeCfg tm ⟨qNew, (t.write w).move_right⟩ ++ [#] := by
+  rw [tau2_stepTilesRightInterior,
+      encodeCfg_after_right_move_eq tm qNew t w h_nondeg h_right_ne]
+
 end PCP.LuToMPCP
