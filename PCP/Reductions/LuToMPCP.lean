@@ -1347,4 +1347,68 @@ lemma stepTilesAbsorbRight_subset_luTiles (tm : SingleTapeTM Symbol)
   · exact map_copyTile_subset_luTiles tm _ tile hr
   · exact sepTile_mem_luTiles tm
 
+/-! ### `absorbAndFinish`: the absorption-phase tile suffix
+
+Given a halt config presented as raw lists `(left, right)`, produce
+the full tile sequence that:
+1. Iteratively absorbs each left symbol (innermost first), then each
+   right symbol (leftmost first), shrinking the encoded window down
+   to `[h⊥]`.
+2. Ends with `finalTile`.
+
+The matching invariant
+  `tau1 = encodeHaltList tm left right ++ [#] ++ tau2`
+holds for every `(left, right)`, by structural induction. -/
+def absorbAndFinish (tm : SingleTapeTM Symbol) :
+    List (Option Symbol) → List (Option Symbol) →
+      Stack (Alpha tm.State Symbol)
+  | [],         []          => [finalTile tm]
+  | [],         r :: rest   => stepTilesAbsorbRight tm [] r rest ++
+                                 absorbAndFinish tm [] rest
+  | l :: rest,  right       => stepTilesAbsorbLeft tm l rest right ++
+                                 absorbAndFinish tm rest right
+
+/-- The matching invariant for `absorbAndFinish`. -/
+lemma absorbAndFinish_matching (tm : SingleTapeTM Symbol)
+    (left right : List (Option Symbol)) :
+    tau1 (absorbAndFinish tm left right) =
+      encodeHaltList tm left right ++ [#] ++
+        tau2 (absorbAndFinish tm left right) := by
+  induction left, right using absorbAndFinish.induct with
+  | case1 =>
+    -- left = [], right = []
+    simp [absorbAndFinish, finalTile, encodeHaltList, liftTape]
+  | case2 r rest ih =>
+    -- left = [], right = r :: rest
+    simp only [absorbAndFinish, tau1_append, tau2_append,
+               tau1_stepTilesAbsorbRight, tau2_stepTilesAbsorbRight, ih,
+               List.append_assoc]
+  | case3 l rest right ih =>
+    -- left = l :: rest, right = right
+    simp only [absorbAndFinish, tau1_append, tau2_append,
+               tau1_stepTilesAbsorbLeft, tau2_stepTilesAbsorbLeft, ih,
+               List.append_assoc]
+
+/-- Every tile in `absorbAndFinish` belongs to `luTiles`. -/
+lemma absorbAndFinish_subset_luTiles (tm : SingleTapeTM Symbol)
+    (left right : List (Option Symbol))
+    (tile : Tile (Alpha tm.State Symbol))
+    (htile : tile ∈ absorbAndFinish tm left right) :
+    tile ∈ luTiles tm := by
+  induction left, right using absorbAndFinish.induct with
+  | case1 =>
+    simp only [absorbAndFinish, List.mem_singleton] at htile
+    rw [htile]
+    exact finalTile_mem_luTiles tm
+  | case2 r rest ih =>
+    simp only [absorbAndFinish, List.mem_append] at htile
+    rcases htile with hL | hR
+    · exact stepTilesAbsorbRight_subset_luTiles tm [] r rest tile hL
+    · exact ih hR
+  | case3 l rest right ih =>
+    simp only [absorbAndFinish, List.mem_append] at htile
+    rcases htile with hL | hR
+    · exact stepTilesAbsorbLeft_subset_luTiles tm l rest right tile hL
+    · exact ih hR
+
 end PCP.LuToMPCP

@@ -1,3 +1,4 @@
 /.lake
 *.log
+.log
 .DS_Store
