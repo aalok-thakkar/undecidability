@@ -37,86 +37,108 @@ classes, `match_start`, generalised backward direction).
 * `tau1`/`tau2` of a `List.map (copyTile tm)` is `liftTape tm syms`.
 * Structural facts: `startTile_top`, `startTile_bot`, `block_eq`.
 
-### `Lu ≤_m MPCP`: no-move step
-`stepTilesNoMove` — the tile sequence simulating one no-move TM step,
-with a complete proof of:
-* `tau1_stepTilesNoMove`: `tau1 = encodeRunningCfg(q, t) ++ [#]`.
-* `tau2_stepTilesNoMove`: `tau2` produces the next configuration.
-* `stepTilesNoMove_subset_luTiles`: every tile is in `luTiles`.
+### `Lu ≤_m MPCP`: all step-simulation lemmas
+All four TM-step families fully simulated:
+* **No-move** (`stepTilesNoMove`): `tau1`, `tau2`, subset lemmas.
+* **Right-interior** (`stepTilesRightInterior`): `tau1`, `tau2`,
+  `tau2_stepTilesRightInterior_eq_encodeCfg`, subset lemmas.
+* **Right-boundary** (`stepTilesRightBoundary`): analogous, with the
+  `StackTape.cons` blank-stripping subtlety handled via the
+  `NoBlankWrites` side condition.
+* **Left-interior** (`stepTilesLeftInterior`): `tau1`, `tau2`,
+  `tau2_stepTilesLeftInterior_eq_encodeCfg`, subset lemmas.
+* **Left-boundary** (`stepTilesLeftBoundary`): analogous.
+* Unified dispatcher: `stepTilesAux`, `stepTiles`, `tau1_stepTiles`,
+  `tau2_stepTiles`, `stepTiles_subset_luTiles`.
+* `stepResult` and `tm_step_running`.
+
+### `Lu ≤_m MPCP`: halt-absorption phase
+Full absorption sequence `absorbAndFinish`:
+* `encodeHaltList`, `encodeHaltedCfg_eq_encodeHaltList`.
+* Per-iteration tile sequences `stepTilesAbsorbLeft` /
+  `stepTilesAbsorbRight` with `tau1`, `tau2`, and subset lemmas.
+* `absorbAndFinish_matching`: the matching invariant
+  `tau1 = encodeHaltList left right ++ [#] ++ tau2`
+  proved by structural induction.
+* `absorbAndFinish_subset_luTiles`.
+
+### `Lu ≤_m MPCP`: forward direction `Halts → MHasSolution`
+* `forward_aux`: induction on the length of the halting chain
+  (`RelatesInSteps`), gluing `stepTiles` blocks and `absorbAndFinish`.
+* `halts_implies_mhasSolution`: the main forward theorem (requires
+  `NoBlankWrites`).
 
 ## 🚧 Remaining work
 
-### 1. Right-move step simulation
-Mirror `stepTilesNoMove` for `tm.tr q a = (⟨w, some right⟩, qNew)`.
-Two sub-cases:
-* **Interior** (`t.right.toList ≠ []`): use `rightMoveTile`. Encoding
-  after step has new head = `t.right.head`.
-* **Boundary** (`t.right.toList = []`): use `rightMoveBoundaryTile`,
-  which inserts an explicit `none` for the new (blank) head.
+### 1. Backward direction `MHasSolution → Halts`
 
-Lemmas to prove: `tau1_stepTilesRight{Interior,Boundary}`,
-`tau2_stepTilesRight{Interior,Boundary}`,
-`stepTilesRight_subset_luTiles` (one combined or two specialised).
+Given any tile sequence `A` satisfying
 
-**Subtlety.** cslib's `BiTape.move_right` performs
-`StackTape.cons (t.write w).head t.left` for the new left side, and
-`StackTape.cons` swallows a leading `none` when the StackTape is empty.
-This means when `w = none ∧ t.left.toList = []` the encoding loses a
-symbol that the naïve tile output would emit. Either:
-* (a) thread this through the lemmas explicitly with separate cases,
-  or
-* (b) introduce an auxiliary "logical" encoding that is independent of
-  `StackTape.cons`'s normalisation, and prove its equivalence to
-  `encodeCfg` on the `BiTape`s actually produced by `tm.step`.
+```
+tau1 A = encodeCfg tm (initCfg tm w) ++ [#] ++ tau2 A
+∀ t ∈ A, t ∈ luTiles tm
+```
 
-### 2. Left-move step simulation
-Symmetric: `tm.tr q a = (⟨w, some left⟩, qNew)`, two sub-cases
-(`t.left.toList = []` boundary vs. interior). Same `StackTape.cons`
-subtlety on the right side. Tiles already in place: `leftMoveTile`,
-`leftMoveBoundaryTile`.
+recover a halting computation of `tm` on `w`.
 
-### 3. Halt-absorption iteration lemmas
-After the TM halts, `bot` ends with `# … h⊥ … #`. One absorption
-iteration applies `absorbLeftTile` or `absorbRightTile` to remove a
-single tape symbol from one side. Lemmas:
-* `tau1_absorbIterLeft` / `tau2_absorbIterLeft`: when `t.left ≠ []`,
-  `tau1 = encodeHaltedCfg(t) ++ [#]`,
-  `tau2 = encodeHaltedCfg(t with one fewer left symbol) ++ [#]`.
-* Symmetric for the right.
-* Termination: after `len(left) + len(right)` iterations the encoded
-  config is just `[h⊥]`, so the *final tile* applies and equalises
-  top with bot.
+**Proof strategy** (induction on `A.length`):
 
-### 4. Forward direction `Halts → MHasSolution`
-Construct a tile sequence by induction on `RelatesInSteps` (or by an
-explicit fold over the halting computation), gluing together step
-sequences and the absorption phase. The matching condition
-`(startTile tm w).top ++ tau1 A = (startTile tm w).bot ++ tau2 A`
-follows from telescoping the per-step `tau1`/`tau2` lemmas.
+1. **`mem_luTiles_top`** — complete characterisation of tile tops in
+   `luTiles`: every top is one of `[↟ₜa]`, `[#]`, `[↟ₛq, ↟ₜa]`,
+   `[↟ₛq, ↟ₜa, #]`, `[↟ₜb, ↟ₛq, ↟ₜa]`, `[↟ₜa, h⊥]`, `[h⊥, ↟ₜa]`,
+   or `[h⊥, #, #]`.
 
-### 5. Backward direction `MHasSolution → Halts`
-Given a matching `A`, recover a halting computation. The strategy
-mirrors the proof of `pcp_to_mpcp_solution_gen` in `PCP/Reduction.lean`:
-* A `match_start`-style lemma forcing the first tile of any solution
-  to be `startTile`.
-* A "match-step" lemma showing each block of the matching corresponds
-  to one TM transition (per direction case).
-* Termination: any solution must eventually reach `finalTile`, which is
-  only applicable when the TM has halted.
+2. **`copy_prefix_forced`** — if the invariant lead starts with
+   `liftTape tm L` (all tape-lift symbols) and `L ≠ []`, the tile
+   sequence starts with `L.map (copyTile tm)`.  Key: `liftTape` symbols
+   can only be consumed by `copyTile` (not `leftMoveTile`, whose second
+   char is `↟ₛ_`, nor `absorbLeftTile`, whose second char is `h⊥`).
 
-### 6. Final theorem
+3. **`transition_forced`** — when the lead starts with `↟ₛq`, the only
+   tiles in `luTiles` with a top beginning with `↟ₛq` are transition
+   tiles for `(q, a)`.  `transitionTilesFor` ensures exactly one variant
+   (no-move, right, or left) is present, uniquely determined by
+   `tm.tr q a`.
+
+4. **`starts_with_stepTiles`** — combines the copy and transition forcing
+   to show `A = stepTiles tm q tape ++ A'` and the residual invariant
+   holds for `(stepResult tm q tape, A')`.
+
+5. **`backward_halt`** — for a halted cfg `⟨none, tape⟩`, the absorption
+   tiles force `A` to start with `absorbAndFinish ...`, which closes with
+   `finalTile` and terminates.
+
+6. **`backward_aux`** — strong induction on `A.length`:
+   * `A = []` → contradiction (lead is nonempty).
+   * `cfg = ⟨none, _⟩` → `ReflTransGen.refl`.
+   * `cfg = ⟨some q, tape⟩` → apply `starts_with_stepTiles`, get `A'`
+     with `A'.length < A.length`; apply IH; chain the TM step.
+
+**Subtlety.** Extra `copyTile`s at the front of `A` are transparent
+(they cancel in tau1 and tau2) but they make the residual lead longer,
+not shorter.  The induction terminates because `A.length` strictly
+decreases each time we consume at least one tile; the number of tiles
+consumed per logical step is ≥ 2 (transition tile + sepTile at minimum).
+
+### 2. Final theorem
+
 ```lean
-theorem lu_le_mpcp (tm : SingleTapeTM Symbol) (w : List Symbol) :
+theorem lu_le_mpcp (tm : SingleTapeTM Symbol) (h_nbw : NoBlankWrites tm)
+    (w : List Symbol) :
     Halts tm w ↔ MHasSolution (startTile tm w) (luTiles tm)
 ```
+
+Forward direction: `halts_implies_mhasSolution` (done).
+Backward direction: `mhasSolution_implies_halts` (step 1 above).
 
 ## Estimated scope
 
 The Coq counterpart in
 [`coq-library-undecidability`](https://github.com/uds-psl/coq-library-undecidability)
-runs to roughly 1500 lines for this single reduction. Expect 5–8
-focused sessions to complete steps 1–6, with step 4 (forward) being
-roughly half the work and step 5 (backward) the other half.
+runs to roughly 1500 lines for this single reduction. Steps 1–4
+(forward direction and simulation infrastructure) are complete at ~1683
+lines. The backward direction (step 5) and final theorem (step 6) are
+estimated at 400–600 additional lines, requiring 2–3 focused sessions.
 
 ## Build invariant
 

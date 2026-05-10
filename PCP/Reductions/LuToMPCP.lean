@@ -1591,4 +1591,92 @@ lemma tau2_stepTiles (tm : SingleTapeTM Symbol) (h_nbw : NoBlankWrites tm)
   unfold stepTiles stepResult
   exact tau2_stepTilesAux tm q t _ _ _ (h_nbw q t.head)
 
+/-! ## Forward direction: `Halts → MHasSolution`
+
+The forward-direction proof proceeds by induction on the length `n`
+of the halting computation `cfg →ⁿ ⟨none, target_tape⟩`. The base
+case (`n = 0`, i.e., `cfg` is already halted) uses `absorbAndFinish`
+to shrink the encoded halt configuration down to `[h⊥]` and close
+with `finalTile`. The inductive step prepends one `stepTiles`
+sub-sequence and invokes the IH on the residual chain. -/
+
+/-- The auxiliary forward lemma, indexed by the chain length `n`. -/
+lemma forward_aux (tm : SingleTapeTM Symbol) (h_nbw : NoBlankWrites tm)
+    (target_tape : BiTape Symbol) :
+    ∀ (cfg : tm.Cfg) (n : ℕ),
+      Relation.RelatesInSteps tm.TransitionRelation cfg
+        ⟨none, target_tape⟩ n →
+      ∃ A : Stack (Alpha tm.State Symbol),
+        (∀ tile ∈ A, tile ∈ luTiles tm) ∧
+        tau1 A = encodeCfg tm cfg ++ [#] ++ tau2 A := by
+  intro cfg n h_chain
+  induction n generalizing cfg with
+  | zero =>
+    -- `cfg = ⟨none, target_tape⟩` by `RelatesInSteps.zero`.
+    have hzero : cfg = ⟨none, target_tape⟩ := h_chain.zero
+    subst hzero
+    refine ⟨absorbAndFinish tm target_tape.left.toList
+              (target_tape.head :: target_tape.right.toList),
+            ?_, ?_⟩
+    · intro tile htile
+      exact absorbAndFinish_subset_luTiles tm _ _ tile htile
+    · rw [show
+          encodeCfg tm (⟨none, target_tape⟩ : tm.Cfg) = encodeHaltedCfg tm target_tape from rfl,
+          encodeHaltedCfg_eq_encodeHaltList]
+      exact absorbAndFinish_matching tm _ _
+  | succ n ih =>
+    -- Chain of length `n+1` decomposes as `cfg →¹ cfg' →ⁿ halted`.
+    obtain ⟨cfg', h_step, h_rest⟩ := h_chain.succ'
+    -- For `tm.step cfg = some cfg'`, we must have `cfg.state = some q`.
+    cases hcfg : cfg with
+    | mk state tape =>
+      cases state with
+      | none =>
+        -- `tm.step ⟨none, tape⟩ = none`, contradicting `h_step`.
+        rw [hcfg] at h_step
+        unfold SingleTapeTM.TransitionRelation at h_step
+        simp [SingleTapeTM.step] at h_step
+      | some q =>
+        -- `cfg' = stepResult tm q tape`.
+        rw [hcfg] at h_step
+        unfold SingleTapeTM.TransitionRelation at h_step
+        rw [tm_step_running] at h_step
+        have h_cfg' : cfg' = stepResult tm q tape := (Option.some.inj h_step).symm
+        subst h_cfg'
+        -- Apply IH to the n-step residual chain.
+        obtain ⟨A', hA'_mem, hA'_match⟩ := ih (stepResult tm q tape) h_rest
+        -- A = stepTiles ++ A'.
+        refine ⟨stepTiles tm q tape ++ A', ?_, ?_⟩
+        · intro tile htile
+          rw [List.mem_append] at htile
+          rcases htile with hL | hR
+          · exact stepTiles_subset_luTiles tm q tape tile hL
+          · exact hA'_mem tile hR
+        · rw [tau1_append, tau2_append,
+              tau1_stepTiles, tau2_stepTiles tm h_nbw, hA'_match]
+          rw [encodeCfg_running]
+
+/-- **Forward direction**: if `Halts tm w`, then the reduced MPCP
+    instance `(startTile tm w, luTiles tm)` has a solution. Requires
+    the TM to never write a blank symbol. -/
+theorem halts_implies_mhasSolution (tm : SingleTapeTM Symbol)
+    (h_nbw : NoBlankWrites tm) (w : List Symbol) (h : Halts tm w) :
+    MHasSolution (startTile tm w) (luTiles tm) := by
+  obtain ⟨target_tape, h_chain⟩ := h
+  -- Convert `ReflTransGen` to `RelatesInSteps`.
+  obtain ⟨n, h_chain_n⟩ := h_chain.relatesInSteps
+  obtain ⟨A, hA_mem, hA_match⟩ :=
+    forward_aux tm h_nbw target_tape (SingleTapeTM.initCfg tm w) n h_chain_n
+  refine ⟨A, ?_, ?_⟩
+  · -- Every tile in A is in `startTile :: luTiles`.
+    intro tile htile
+    exact List.mem_cons_of_mem _ (hA_mem tile htile)
+  · -- The matching condition.
+    show (startTile tm w).top ++ tau1 A = (startTile tm w).bot ++ tau2 A
+    rw [startTile_top, startTile_bot, hA_match]
+    show
+      [#] ++ (encodeCfg tm (SingleTapeTM.initCfg tm w) ++ [#] ++ tau2 A) =
+      (# :: encodeCfg tm (SingleTapeTM.initCfg tm w) ++ [#]) ++ tau2 A
+    simp [List.append_assoc]
+
 end PCP.LuToMPCP
