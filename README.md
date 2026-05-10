@@ -34,70 +34,78 @@ PCP/
                                 cslib's `Turing.SingleTapeTM`, with
                                 the equivalence to `HaltsWithinTime`.
   Reductions/
-    LuToMPCP.lean            -- Lu ≤_m MPCP construction:
-                                * Alphabet `Alpha`
-                                * Configuration encoding
-                                  (`encodeRunningCfg`/`encodeHaltedCfg`)
-                                * Tile constructors (start, copy,
-                                  separator, transitions for
-                                  no-move/right/left & boundaries,
-                                  halt-absorb left/right, final)
-                                * Tile enumeration (`luTiles`)
-                                * Reduction `luToMpcp`
-                                * Membership lemmas for every family
-                                * tau1/tau2 of copy-tile sequences
-                                * **Proven**: full simulation
-                                  invariant for the *no-move* step
-                                  case (tau1 = encodeRunningCfg + #,
-                                  tau2 = encoded next config + #,
-                                  membership in luTiles).
+    LuToMPCP.lean            -- Lu ≤_m MPCP construction and proofs.
 PCP.lean                     -- Library root.
 Main.lean                    -- Executable entry point.
+ROADMAP.md                   -- Detailed proof plan and next steps.
 ```
 
 ## Status
 
-| Step                        | Status     |
-|-----------------------------|------------|
-| Core PCP API                | ✓ complete |
-| MPCP API                    | ✓ complete |
-| `MPCP ≤_m PCP`              | ✓ complete |
-| `Halts` predicate           | ✓ complete |
-| `Lu ≤_m MPCP` infrastructure| ✓ complete |
-| Lu→MPCP: no-move step proof | ✓ complete |
-| Lu→MPCP: right-move step    | TODO       |
-| Lu→MPCP: left-move step     | TODO       |
-| Lu→MPCP: halt absorption    | TODO       |
-| Lu→MPCP: forward direction  | TODO       |
-| Lu→MPCP: backward direction | TODO       |
+| Step                          | Status       |
+|-------------------------------|--------------|
+| Core PCP API                  | ✅ complete  |
+| MPCP API                      | ✅ complete  |
+| `MPCP ≤_m PCP`                | ✅ complete  |
+| `Halts` predicate             | ✅ complete  |
+| `Lu ≤_m MPCP` infrastructure  | ✅ complete  |
+| Lu→MPCP: no-move step         | ✅ complete  |
+| Lu→MPCP: right-move step      | ✅ complete  |
+| Lu→MPCP: left-move step       | ✅ complete  |
+| Lu→MPCP: halt absorption      | ✅ complete  |
+| Lu→MPCP: forward direction    | ✅ complete  |
+| Lu→MPCP: backward direction   | 🚧 in progress |
 
 The development contains **no `sorry`**. Verified against
-`leanprover/lean4:v4.29.0-rc4` + cslib + Mathlib (see `lake-manifest.json`).
+`leanprover/lean4:v4.29.0-rc4` + cslib (see `lake-manifest.json`).
 
-## Roadmap (Lu ≤_m MPCP)
+## What is proved
 
-The simulation invariant is
+### `MPCP ≤_m PCP` — `PCP/Reduction.lean`
 
-  `bot = top ++ "lookahead by one configuration"`.
+The full `mpcp_iff_pcp` equivalence via the Hopcroft–Ullman construction:
+extend the alphabet with `⋕`-prefixed hash symbols, interleave the tile
+top/bot words, produce a `tileStart`/`tileReg`/`tileEnd` triple and prove
+`match_start` (any solution must begin with the start tile) plus the
+complete forward and backward directions.
 
-The forward direction proceeds by induction on the number of TM steps.
-For each step the tile sequence is
+### `Lu ≤_m MPCP` (forward) — `PCP/Reductions/LuToMPCP.lean`
 
-  copy-l_n … copy-l_1 · transition · copy-r_1 … copy-r_m · sepTile
+Given `Halts tm w` (with the `NoBlankWrites` side condition), constructs
+a tile sequence `A ⊆ startTile :: luTiles tm` satisfying the MPCP matching
+equation. The proof inductively builds `A` by:
 
-with `tau1 = encodeCfg(C) ++ #` and `tau2 = encodeCfg(C') ++ #`. The
-no-move case is proven (`tau1_stepTilesNoMove`, `tau2_stepTilesNoMove`,
-`stepTilesNoMove_subset_luTiles` in `PCP/Reductions/LuToMPCP.lean`).
+1. Prepending `stepTiles tm q tape` for each TM step, using one of four
+   tile-group constructors depending on the transition direction and whether
+   the head is at a tape boundary:
 
-The right- and left-move cases are similar but introduce one subtlety
-because cslib's `BiTape` strips trailing blanks (via `StackTape.cons`):
-when the head moves into a previously-blank cell *and* writes a blank
-*and* the corresponding side of the tape is empty, the encoding drops a
-symbol that the naïve tile sequence would emit. The boundary tiles
-already in place handle the standard cases; the proofs need to thread
-this StackTape behaviour carefully (likely via separate lemmas for
-`(t.write w).move_right` etc.).
+   | Case              | Tiles used                                         |
+   |-------------------|----------------------------------------------------|
+   | No move           | `left-copies · noMoveTile · right-copies · sep`    |
+   | Right (interior)  | `left-copies · rightMoveTile · right-copies · sep` |
+   | Right (boundary)  | `left-copies · rightMoveBoundaryTile · sep`        |
+   | Left (interior)   | `tail-copies · leftMoveTile · right-copies · sep`  |
+   | Left (boundary)   | `leftMoveBoundaryTile · right-copies · sep`        |
 
-After all step lemmas, the halt-absorption phase iterates
-`absorbLeftTile` / `absorbRightTile` to shrink the halt configuration
-to just `h⊥`, after which `finalTile` closes the match.
+2. Closing with `absorbAndFinish` once the TM halts: iteratively absorbs
+   tape symbols via `absorbLeftTile`/`absorbRightTile`, then applies
+   `finalTile` to equalise top and bot.
+
+Key lemmas: `tau1_stepTiles`, `tau2_stepTiles`, `stepTiles_subset_luTiles`,
+`absorbAndFinish_matching`, `absorbAndFinish_subset_luTiles`,
+`halts_implies_mhasSolution`.
+
+## What remains
+
+### `Lu ≤_m MPCP` (backward) — `MHasSolution → Halts`
+
+Given any tile sequence `A` from `luTiles` satisfying
+`tau1 A = encodeCfg(initCfg) ++ [#] ++ tau2 A`,
+show that `tm` halts on `w`. See `ROADMAP.md` for the detailed proof plan.
+
+The top-level goal is:
+```lean
+theorem lu_le_mpcp (tm : SingleTapeTM Symbol) (h_nbw : NoBlankWrites tm)
+    (w : List Symbol) :
+    Halts tm w ↔ MHasSolution (startTile tm w) (luTiles tm)
+```

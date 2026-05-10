@@ -1679,4 +1679,157 @@ theorem halts_implies_mhasSolution (tm : SingleTapeTM Symbol)
       (# :: encodeCfg tm (SingleTapeTM.initCfg tm w) ++ [#]) ++ tau2 A
     simp [List.append_assoc]
 
+/-! ## Backward direction: `MHasSolution → Halts`
+
+### Proof plan
+
+We want:
+```
+theorem mhasSolution_implies_halts (tm : SingleTapeTM Symbol)
+    (h_nbw : NoBlankWrites tm) (w : List Symbol)
+    (h : MHasSolution (startTile tm w) (luTiles tm)) :
+    Halts tm w
+```
+
+Unpacking `MHasSolution` gives a tile list `A` with
+`∀ t ∈ A, t ∈ luTiles tm` and the matching equation
+
+  `tau1 A = encodeCfg tm (initCfg tm w) ++ [#] ++ tau2 A`   … (★)
+
+The proof proceeds by **strong induction on `A.length`**, maintaining (★)
+as the invariant and the current configuration `cfg` as a parameter.
+
+---
+
+#### Step 1 — `mem_luTiles_top`: characterise every tile top in `luTiles`
+
+Every tile `t ∈ luTiles tm` has top of one of these eight shapes:
+
+| Top shape            | Tile family          |
+|----------------------|----------------------|
+| `[↟ₜa]`             | `copyTile a`         |
+| `[#]`               | `sepTile`            |
+| `[↟ₛq, ↟ₜa]`        | `noMoveTile`, `rightMoveTile`, `leftMoveBoundaryTile` |
+| `[↟ₛq, ↟ₜa, #]`     | `rightMoveBoundaryTile` |
+| `[↟ₜb, ↟ₛq, ↟ₜa]`   | `leftMoveTile`       |
+| `[↟ₜa, h⊥]`         | `absorbLeftTile a`   |
+| `[h⊥, ↟ₜa]`         | `absorbRightTile a`  |
+| `[h⊥, #, #]`        | `finalTile`          |
+
+Proof: unfold `luTiles`, case-split on membership in each sub-list, then
+read off the `top` field using the `@[simp]` projection lemmas.
+
+---
+
+#### Step 2 — `copy_prefix_forced`: tape-lift prefix forces copy tiles
+
+**Lemma.** If `tau1 A = liftTape tm L ++ rest ++ tau2 A`
+and `rest` does not begin with `h⊥`, then
+`A = L.map (copyTile tm) ++ A'` for some `A'` with
+`tau1 A' = rest ++ tau2 A'`.
+
+*Key argument* (by induction on `L`):
+The invariant's first character is `↟ₜa` (a tape lift). From
+`mem_luTiles_top`, the only tiles with first top character `↟ₜa` are:
+- `copyTile a` (top = `[↟ₜa]`, bot = `[↟ₜa]`) — transparent.
+- `leftMoveTile` (top = `[↟ₜa, ↟ₛq, ↟ₜh]`) — second char `↟ₛq`, but
+  the invariant's second character is either `↟ₜ_` (another tape lift,
+  when `L` has more elements) or `↟ₛq` (only at the last left symbol).
+- `absorbLeftTile a` (top = `[↟ₜa, h⊥]`) — ruled out by the `rest`
+  hypothesis (second char would need to be `h⊥`).
+
+When `L` has ≥ 2 elements the second char is `↟ₜ_`, ruling out
+`leftMoveTile` and `absorbLeftTile`; hence the first tile is `copyTile a`.
+When `L` has exactly one element, the second char is the first char of
+`rest`; the `rest ≠ h⊥…` hypothesis rules out `absorbLeftTile`, and
+whether `leftMoveTile` applies is decided in Step 3.
+
+---
+
+#### Step 3 — `transition_forced`: state-marker forces unique transition tile
+
+**Lemma.** If `tau1 A = [↟ₛq] ++ stuff ++ tau2 A` and
+`∀ t ∈ A, t ∈ luTiles tm`, then the first tile of `A` is the unique
+transition tile for `(q, head)` determined by `tm.tr q head`.
+
+*Key argument*: from `mem_luTiles_top`, the only tiles whose top begins
+with `↟ₛq` are those in `transitionTilesFor tm q _`. Since `transitionTiles`
+is indexed over all `(q, a)` pairs, only tiles for the specific `a` matching
+the second invariant character can have their top align; and
+`transitionTilesFor tm q a` contains exactly one move-direction variant
+(no-move, right, or left) per the value of `tm.tr q a`.
+
+In the left-boundary sub-case (tape.left = []) the tile is
+`leftMoveBoundaryTile`; in the left-interior sub-case (one left symbol
+remaining) the tile is `leftMoveTile`, whose 3-character top
+`[↟ₜb, ↟ₛq, ↟ₜa]` is forced by `copy_prefix_forced` having already
+consumed all but the last left symbol.
+
+---
+
+#### Step 4 — `starts_with_stepTiles`: running cfg forces a full step group
+
+**Lemma.** If `tau1 A = encodeRunningCfg tm q tape ++ [#] ++ tau2 A`
+and `∀ t ∈ A, t ∈ luTiles tm`, then
+```
+∃ A', A = stepTiles tm q tape ++ A' ∧
+      (∀ t ∈ A', t ∈ luTiles tm) ∧
+      tau1 A' = encodeCfg tm (stepResult tm q tape) ++ [#] ++ tau2 A'
+```
+
+*Proof*: Apply `copy_prefix_forced` for the `|tape.left|` left-tape symbols,
+then `transition_forced` for the transition tile, then `copy_prefix_forced`
+again for the right-tape symbols, then observe the next char is `#` (forcing
+`sepTile`). Together these tiles are exactly `stepTiles tm q tape`, and
+the residual invariant follows from `tau1_stepTiles` and `tau2_stepTiles`.
+
+---
+
+#### Step 5 — `starts_with_absorbAndFinish`: halted cfg forces absorption
+
+**Lemma.** If `tau1 A = encodeHaltedCfg tm tape ++ [#] ++ tau2 A`
+and `∀ t ∈ A, t ∈ luTiles tm`, then
+`A = absorbAndFinish tm tape.left.toList (tape.head :: tape.right.toList) ++ A'`
+for some `A'` satisfying `tau1 A' = tau2 A'`.
+
+*Proof*: Similar character-by-character forcing, using `absorbLeftTile`/
+`absorbRightTile` to consume the tape-lift symbols around `h⊥`, and
+`finalTile` (top = `[h⊥, #, #]`, bot = `[#]`) to close when
+the encoding has shrunk to `[h⊥]`.
+
+---
+
+#### Step 6 — `backward_aux`: main induction
+
+```
+∀ n (A : Stack _) (cfg : tm.Cfg),
+    A.length ≤ n →
+    (∀ t ∈ A, t ∈ luTiles tm) →
+    tau1 A = encodeCfg tm cfg ++ [#] ++ tau2 A →
+    ∃ tape, ReflTransGen tm.TransitionRelation cfg ⟨none, tape⟩
+```
+
+- **Base** (`n = 0`, so `A = []`): `tau1 [] = [] ≠ encodeCfg … ++ [#]`. Contradiction.
+- **Halted** (`cfg = ⟨none, tape⟩`): `ReflTransGen.refl`.
+- **Running** (`cfg = ⟨some q, tape⟩`): apply `starts_with_stepTiles` to
+  get `A = stepTiles ++ A'` with `A'.length < A.length`; apply the IH to
+  `A'` and `stepResult tm q tape`; chain with one `TransitionRelation` step.
+
+---
+
+#### Step 7 — final theorem
+
+```
+theorem lu_le_mpcp (tm : SingleTapeTM Symbol) (h_nbw : NoBlankWrites tm)
+    (w : List Symbol) :
+    Halts tm w ↔ MHasSolution (startTile tm w) (luTiles tm)
+```
+
+Forward: `halts_implies_mhasSolution` (already proved).
+Backward: unpack `MHasSolution`, cancel the leading `[#]` from the
+matching equation to obtain the invariant (★), then call `backward_aux`
+with `cfg = initCfg tm w`.
+
+-/
+
 end PCP.LuToMPCP
