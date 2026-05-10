@@ -1832,4 +1832,65 @@ with `cfg = initCfg tm w`.
 
 -/
 
+/-! ## Step 1: Characterise every tile top in `luTiles` -/
+
+/-- Every tile `t` in `luTiles tm` has a top of one of these eight shapes:
+`[↟ₜa]`, `[#]`, `[↟ₛq, ↟ₜa]`, `[↟ₛq, ↟ₜa, #]`, `[↟ₜb, ↟ₛq, ↟ₜa]`,
+`[↟ₜa, h⊥]`, `[h⊥, ↟ₜa]`, or `[h⊥, #, #]`. -/
+private lemma mem_luTiles_top (tm : SingleTapeTM Symbol)
+    (t : Tile (Alpha tm.State Symbol)) (ht : t ∈ luTiles tm) :
+    (∃ a : Option Symbol, t.top = [↟ₜa]) ∨
+    t.top = [#] ∨
+    (∃ (q : tm.State) (a : Option Symbol), t.top = [↟ₛq, ↟ₜa]) ∨
+    (∃ (q : tm.State) (a : Option Symbol), t.top = [↟ₛq, ↟ₜa, #]) ∨
+    (∃ (b : Option Symbol) (q : tm.State) (a : Option Symbol),
+        t.top = [↟ₜb, ↟ₛq, ↟ₜa]) ∨
+    (∃ a : Option Symbol, t.top = [↟ₜa, h⊥]) ∨
+    (∃ a : Option Symbol, t.top = [h⊥, ↟ₜa]) ∨
+    t.top = [h⊥, #, #] := by
+  simp only [luTiles, List.mem_append, List.mem_singleton] at ht
+  -- ht has left-nested shape: (((copyTiles ∨ sepTile) ∨ transitionTiles) ∨ absorbTiles) ∨ finalTile
+  rcases ht with ((((ht | rfl) | ht) | ht) | rfl)
+  · -- t ∈ copyTiles tm = Finset.univ.toList.map (copyTile tm)
+    simp only [copyTiles, List.mem_map] at ht
+    obtain ⟨a, _, rfl⟩ := ht
+    exact Or.inl ⟨a, rfl⟩
+  · -- t = sepTile tm; top = [#]
+    exact Or.inr (Or.inl rfl)
+  · -- t ∈ transitionTiles tm
+    simp only [transitionTiles, List.mem_flatMap] at ht
+    obtain ⟨⟨q, a⟩, _, ht⟩ := ht
+    rcases h_tr : tm.tr q a with ⟨⟨w, dir⟩, qNew⟩
+    cases dir with
+    | none =>
+      simp only [transitionTilesFor] at ht
+      rw [h_tr] at ht
+      simp only [List.mem_singleton] at ht
+      subst ht
+      exact Or.inr (Or.inr (Or.inl ⟨q, a, rfl⟩))
+    | some d =>
+      cases d with
+      | right =>
+        simp only [transitionTilesFor] at ht
+        rw [h_tr] at ht
+        simp only [List.mem_cons, List.mem_nil_iff, or_false] at ht
+        rcases ht with rfl | rfl
+        · exact Or.inr (Or.inr (Or.inl ⟨q, a, rfl⟩))
+        · exact Or.inr (Or.inr (Or.inr (Or.inl ⟨q, a, rfl⟩)))
+      | left =>
+        simp only [transitionTilesFor] at ht
+        rw [h_tr] at ht
+        simp only [List.mem_cons, List.mem_map] at ht
+        rcases ht with rfl | ⟨b, _, rfl⟩
+        · exact Or.inr (Or.inr (Or.inl ⟨q, a, rfl⟩))
+        · exact Or.inr (Or.inr (Or.inr (Or.inr (Or.inl ⟨b, q, a, rfl⟩))))
+  · -- t ∈ absorbTiles tm
+    simp only [absorbTiles, List.mem_flatMap, absorbTilesFor,
+               List.mem_cons, List.mem_nil_iff, or_false] at ht
+    obtain ⟨a, _, (rfl | rfl)⟩ := ht
+    · exact Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inl ⟨a, rfl⟩)))))
+    · exact Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inl ⟨a, rfl⟩))))))
+  · -- t = finalTile tm; top = [h⊥, #, #]
+    exact Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr rfl))))))
+
 end PCP.LuToMPCP
