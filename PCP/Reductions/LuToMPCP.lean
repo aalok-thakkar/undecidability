@@ -1133,7 +1133,7 @@ lemma tau1_stepTilesLeftBoundary (tm : SingleTapeTM Symbol) (q : tm.State)
              tau1_map_copyTile, leftMoveBoundaryTile_top, sepTile_top,
              List.append_nil, encodeRunningCfg, h_left_empty,
              liftTape_cons, liftTape_nil, List.reverse_nil]
-  simp [List.append_assoc]
+  simp
 
 /-- The bottom concatenation of `stepTilesLeftBoundary`, in explicit
     list form. -/
@@ -1998,5 +1998,460 @@ private lemma copy_prefix_forced (tm : SingleTapeTM Symbol) :
           cases h_h
       · simp at h_eq                      -- absorbRightTile
       · simp at h_eq                      -- finalTile
+
+/-! ## Step 3: `transition_forced` — state-marker forces a transition tile -/
+
+/-- When the lead of `tau1 A` is the two-character prefix `↟ₛq ↟ₜa`, the
+first tile of `A` is a transition tile for the pair `(q, a)`. Together
+with `mem_luTiles_top`, this rules out every non-transition tile (their
+tops do not start with `↟ₛq`) and pins down `q'` and `a'` of the chosen
+tile constructor as `q` and `a` respectively. The `leftMoveTile` case is
+excluded because its top starts with a tape symbol `↟ₜb`, not `↟ₛq`. -/
+private lemma transition_forced (tm : SingleTapeTM Symbol)
+    (q : tm.State) (a : Option Symbol)
+    (rest : List (Alpha tm.State Symbol))
+    (A : Stack (Alpha tm.State Symbol))
+    (h_mem : ∀ t ∈ A, t ∈ luTiles tm)
+    (h_eq : tau1 A = ↟ₛq :: ↟ₜa :: rest) :
+    ∃ (tile : Tile (Alpha tm.State Symbol))
+      (A' : Stack (Alpha tm.State Symbol)),
+      A = tile :: A' ∧
+      tile ∈ transitionTilesFor tm q a ∧
+      (∀ s ∈ A', s ∈ luTiles tm) := by
+  cases A with
+  | nil => simp at h_eq
+  | cons t A_rest =>
+    have h_t_mem : t ∈ luTiles tm := h_mem t (List.mem_cons_self ..)
+    have h_rest_mem : ∀ s ∈ A_rest, s ∈ luTiles tm :=
+      fun s hs => h_mem s (List.mem_cons_of_mem t hs)
+    refine ⟨t, A_rest, rfl, ?_, h_rest_mem⟩
+    rw [tau1_cons] at h_eq
+    -- The eight cases of `mem_luTiles_top`, in the same order as
+    -- `copy_prefix_forced` above.
+    rcases mem_luTiles_top tm t h_t_mem with
+        ⟨_, rfl⟩
+      | rfl
+      | ⟨q', a', qNew, w, h_tr, rfl⟩
+      | ⟨q', a', qNew, w, h_tr, rfl | rfl⟩
+      | ⟨q', a', qNew, w, h_tr, rfl | ⟨_, rfl⟩⟩
+      | ⟨_, rfl⟩
+      | ⟨_, rfl⟩
+      | rfl
+    · -- copyTile: top = [↟ₜ_]. First char is a tape lift, not `↟ₛq`.
+      simp only [copyTile_top, List.cons_append, List.nil_append] at h_eq
+      injection h_eq with h_h _
+      cases h_h
+    · -- sepTile: top = [#].
+      simp only [sepTile_top, List.cons_append, List.nil_append] at h_eq
+      injection h_eq with h_h _
+      cases h_h
+    · -- noMoveTile q' a' qNew w with tm.tr q' a' = (⟨w, none⟩, qNew).
+      simp only [noMoveTile_top, List.cons_append, List.nil_append] at h_eq
+      injection h_eq with h_h h_rest
+      injection h_h with h_q'
+      subst h_q'
+      injection h_rest with h_a _
+      injection h_a with h_a'
+      subst h_a'
+      simp only [transitionTilesFor]
+      rw [h_tr]
+      exact List.mem_singleton.mpr rfl
+    · -- rightMoveTile q' a' qNew w with right-move transition.
+      simp only [rightMoveTile_top, List.cons_append, List.nil_append] at h_eq
+      injection h_eq with h_h h_rest
+      injection h_h with h_q'
+      subst h_q'
+      injection h_rest with h_a _
+      injection h_a with h_a'
+      subst h_a'
+      simp only [transitionTilesFor]
+      rw [h_tr]
+      exact List.mem_cons_self
+    · -- rightMoveBoundaryTile q' a' qNew w with right-move transition.
+      simp only [rightMoveBoundaryTile_top, List.cons_append,
+                 List.nil_append] at h_eq
+      injection h_eq with h_h h_rest
+      injection h_h with h_q'
+      subst h_q'
+      injection h_rest with h_a _
+      injection h_a with h_a'
+      subst h_a'
+      simp only [transitionTilesFor]
+      rw [h_tr]
+      exact List.mem_cons_of_mem _ List.mem_cons_self
+    · -- leftMoveBoundaryTile q' a' qNew w with left-move transition.
+      simp only [leftMoveBoundaryTile_top, List.cons_append,
+                 List.nil_append] at h_eq
+      injection h_eq with h_h h_rest
+      injection h_h with h_q'
+      subst h_q'
+      injection h_rest with h_a _
+      injection h_a with h_a'
+      subst h_a'
+      simp only [transitionTilesFor]
+      rw [h_tr]
+      exact List.mem_cons_self
+    · -- leftMoveTile q' a' qNew w b: top = [↟ₜb, …]. First char is a
+      -- tape lift, not `↟ₛq`.
+      simp only [leftMoveTile_top, List.cons_append, List.nil_append] at h_eq
+      injection h_eq with h_h _
+      cases h_h
+    · -- absorbLeftTile a': top = [↟ₜa', h⊥]. First char is a tape lift.
+      simp only [absorbLeftTile_top, List.cons_append, List.nil_append] at h_eq
+      injection h_eq with h_h _
+      cases h_h
+    · -- absorbRightTile a': top = [h⊥, ↟ₜa']. First char is `h⊥`.
+      simp only [absorbRightTile_top, List.cons_append, List.nil_append] at h_eq
+      injection h_eq with h_h _
+      cases h_h
+    · -- finalTile: top = [h⊥, #, #]. First char is `h⊥`.
+      simp only [finalTile_top, List.cons_append, List.nil_append] at h_eq
+      injection h_eq with h_h _
+      cases h_h
+
+/-! ## Step 4 helpers: copy prefix that extends up to a state marker -/
+
+/-- Strengthening of `copy_prefix_forced` for the no-move and right-move
+cases: when the lead following `liftTape tm L` is a state marker `↟ₛq`
+and the TM transition `tm.tr q a` (`a` being the tape symbol immediately
+after `↟ₛq`) is *not* a left move, no `leftMoveTile` can swallow the
+last `L`-symbol together with `↟ₛq`.  Hence the copy prefix extends all
+the way to `↟ₛq`. -/
+private lemma copy_prefix_forced_state_lead (tm : SingleTapeTM Symbol)
+    (q : tm.State) (a : Option Symbol)
+    (h_not_left : ∀ (qNew : Option tm.State) (w : Option Symbol),
+        tm.tr q a ≠ (⟨w, some Dir.left⟩, qNew)) :
+    ∀ (L : List (Option Symbol)) (A : Stack (Alpha tm.State Symbol))
+      (rest : List (Alpha tm.State Symbol)),
+      (∀ s ∈ A, s ∈ luTiles tm) →
+      tau1 A = liftTape tm L ++ ↟ₛq :: ↟ₜa :: rest →
+      ∃ A' : Stack (Alpha tm.State Symbol),
+          A = L.map (copyTile tm) ++ A' ∧
+          (∀ s ∈ A', s ∈ luTiles tm) ∧
+          tau1 A' = ↟ₛq :: ↟ₜa :: rest ∧
+          tau2 A = liftTape tm L ++ tau2 A' := by
+  intro L
+  induction L with
+  | nil =>
+    intro A rest h_mem h_eq
+    exact ⟨A, by simp, h_mem, by simpa using h_eq, by simp⟩
+  | cons a' L ih =>
+    intro A rest h_mem h_eq
+    cases A with
+    | nil => simp [liftTape_cons] at h_eq
+    | cons t A_rest =>
+      have h_t_mem : t ∈ luTiles tm := h_mem t (List.mem_cons_self ..)
+      have h_rest_mem : ∀ s ∈ A_rest, s ∈ luTiles tm :=
+        fun s hs => h_mem s (List.mem_cons_of_mem t hs)
+      rw [tau1_cons, liftTape_cons, List.cons_append] at h_eq
+      rcases mem_luTiles_top tm t h_t_mem with
+          ⟨_, rfl⟩
+        | rfl
+        | ⟨_, _, _, _, _, rfl⟩
+        | ⟨_, _, _, _, _, rfl | rfl⟩
+        | ⟨q', a'', _, _, h_tr, rfl | ⟨b, rfl⟩⟩
+        | ⟨_, rfl⟩
+        | ⟨_, rfl⟩
+        | rfl
+      · -- copyTile a'': peel off and recurse.
+        simp only [copyTile_top, List.cons_append, List.nil_append] at h_eq
+        injection h_eq with h_head h_tail
+        injection h_head with h_a
+        subst h_a
+        obtain ⟨A', hA, hA_mem, hA_tau1, hA_tau2⟩ :=
+          ih A_rest rest h_rest_mem h_tail
+        refine ⟨A', ?_, hA_mem, hA_tau1, ?_⟩
+        · simp [List.map_cons, hA]
+        · simp [tau2_cons, copyTile_bot, hA_tau2, liftTape_cons]
+      · simp at h_eq                      -- sepTile
+      · simp at h_eq                      -- noMoveTile
+      · simp at h_eq                      -- rightMoveTile
+      · simp at h_eq                      -- rightMoveBoundaryTile
+      · -- leftMoveBoundaryTile: first char ↟ₛq', tail rhs starts ↟ₜa'. Contradiction.
+        simp only [leftMoveBoundaryTile_top, List.cons_append,
+                   List.nil_append] at h_eq
+        injection h_eq with h_h _
+        cases h_h
+      · -- leftMoveTile q' a'' qNew' w' b: top = [↟ₜb, ↟ₛq', ↟ₜa''].
+        -- Match against ↟ₜa' :: liftTape L ++ ↟ₛq :: ↟ₜa :: rest.
+        simp only [leftMoveTile_top, List.cons_append, List.nil_append] at h_eq
+        injection h_eq with _ h_rest1
+        cases L with
+        | nil =>
+          -- After the first char, rhs is ↟ₛq :: ↟ₜa :: rest. We must
+          -- then have ↟ₛq' = ↟ₛq and ↟ₜa'' = ↟ₜa, forcing q' = q and
+          -- a'' = a; then h_tr says tm.tr q a is a left move, but
+          -- h_not_left rules that out.
+          simp only [liftTape_nil, List.nil_append] at h_rest1
+          injection h_rest1 with h_q_eq h_rest2
+          injection h_q_eq with h_q_eq'
+          subst h_q_eq'
+          injection h_rest2 with h_a_eq _
+          injection h_a_eq with h_a_eq'
+          subst h_a_eq'
+          exact (h_not_left _ _ h_tr).elim
+        | cons _ _ =>
+          -- After the first char, rhs starts with ↟ₜ_. ↟ₛq' ≠ ↟ₜ_.
+          simp only [liftTape_cons, List.cons_append] at h_rest1
+          injection h_rest1 with h_h
+          cases h_h
+      · -- absorbLeftTile a'': top = [↟ₜa'', h⊥].
+        simp only [absorbLeftTile_top, List.cons_append, List.nil_append] at h_eq
+        injection h_eq with _ h_rest
+        cases L with
+        | nil =>
+          simp only [liftTape_nil, List.nil_append] at h_rest
+          injection h_rest with h_h
+          cases h_h
+        | cons _ _ =>
+          simp only [liftTape_cons, List.cons_append] at h_rest
+          injection h_rest with h_h
+          cases h_h
+      · simp at h_eq                      -- absorbRightTile
+      · simp at h_eq                      -- finalTile
+
+/-- If the lead of `tau1 A` is the separator `#`, the head tile of `A`
+must be `sepTile`. -/
+private lemma sep_forced (tm : SingleTapeTM Symbol)
+    (rest : List (Alpha tm.State Symbol))
+    (A : Stack (Alpha tm.State Symbol))
+    (h_mem : ∀ s ∈ A, s ∈ luTiles tm)
+    (h_eq : tau1 A = # :: rest) :
+    ∃ A' : Stack (Alpha tm.State Symbol),
+      A = sepTile tm :: A' ∧
+      tau1 A' = rest ∧
+      (∀ s ∈ A', s ∈ luTiles tm) := by
+  cases A with
+  | nil => simp at h_eq
+  | cons t A_rest =>
+    have h_t_mem : t ∈ luTiles tm := h_mem t (List.mem_cons_self ..)
+    have h_rest_mem : ∀ s ∈ A_rest, s ∈ luTiles tm :=
+      fun s hs => h_mem s (List.mem_cons_of_mem t hs)
+    rw [tau1_cons] at h_eq
+    rcases mem_luTiles_top tm t h_t_mem with
+        ⟨_, rfl⟩
+      | rfl
+      | ⟨_, _, _, _, _, rfl⟩
+      | ⟨_, _, _, _, _, rfl | rfl⟩
+      | ⟨_, _, _, _, _, rfl | ⟨_, rfl⟩⟩
+      | ⟨_, rfl⟩
+      | ⟨_, rfl⟩
+      | rfl
+    · simp only [copyTile_top, List.cons_append, List.nil_append] at h_eq
+      injection h_eq with h _; cases h
+    · -- sepTile: this is the only matching case.
+      simp only [sepTile_top, List.cons_append, List.nil_append] at h_eq
+      injection h_eq with _ h_tail
+      exact ⟨A_rest, rfl, h_tail, h_rest_mem⟩
+    · simp only [noMoveTile_top, List.cons_append, List.nil_append] at h_eq
+      injection h_eq with h _; cases h
+    · simp only [rightMoveTile_top, List.cons_append, List.nil_append] at h_eq
+      injection h_eq with h _; cases h
+    · simp only [rightMoveBoundaryTile_top, List.cons_append,
+                 List.nil_append] at h_eq
+      injection h_eq with h _; cases h
+    · simp only [leftMoveBoundaryTile_top, List.cons_append,
+                 List.nil_append] at h_eq
+      injection h_eq with h _; cases h
+    · simp only [leftMoveTile_top, List.cons_append, List.nil_append] at h_eq
+      injection h_eq with h _; cases h
+    · simp only [absorbLeftTile_top, List.cons_append, List.nil_append] at h_eq
+      injection h_eq with h _; cases h
+    · simp only [absorbRightTile_top, List.cons_append, List.nil_append] at h_eq
+      injection h_eq with h _; cases h
+    · simp only [finalTile_top, List.cons_append, List.nil_append] at h_eq
+      injection h_eq with h _; cases h
+
+/-! ## Step 4: `starts_with_stepTiles` — running cfg forces a step group -/
+
+/-- No-move case. -/
+private lemma starts_with_stepTilesNoMove (tm : SingleTapeTM Symbol)
+    (q : tm.State) (t : BiTape Symbol)
+    (qNew : Option tm.State) (w : Option Symbol)
+    (htr : tm.tr q t.head = (⟨w, none⟩, qNew))
+    (A : Stack (Alpha tm.State Symbol))
+    (h_mem : ∀ s ∈ A, s ∈ luTiles tm)
+    (h_eq : tau1 A = encodeRunningCfg tm q t ++ [#] ++ tau2 A) :
+    ∃ A' : Stack (Alpha tm.State Symbol),
+        A = stepTilesNoMove tm q qNew t w ++ A' ∧
+        (∀ s ∈ A', s ∈ luTiles tm) ∧
+        tau1 A' = encodeCfg tm ⟨qNew, t.write w⟩ ++ [#] ++ tau2 A' := by
+  have h_not_left : ∀ (qN : Option tm.State) (w' : Option Symbol),
+      tm.tr q t.head ≠ (⟨w', some Dir.left⟩, qN) := by
+    intro qN w' h
+    rw [htr] at h
+    injection h with h1 _
+    injection h1 with _ h_dir
+    cases h_dir
+  have h_eq' : tau1 A =
+      liftTape tm t.left.toList.reverse ++ ↟ₛq :: ↟ₜt.head ::
+        (liftTape tm t.right.toList ++ [#] ++ tau2 A) := by
+    simpa [encodeRunningCfg, liftTape_cons, List.append_assoc] using h_eq
+  obtain ⟨A1, hA, hA_mem, hA_tau1, hA_tau2⟩ :=
+    copy_prefix_forced_state_lead tm q t.head h_not_left
+      t.left.toList.reverse A
+      (liftTape tm t.right.toList ++ [#] ++ tau2 A) h_mem h_eq'
+  obtain ⟨tile, A2, hA1_decomp, h_tile_in, hA2_mem⟩ :=
+    transition_forced tm q t.head
+      (liftTape tm t.right.toList ++ [#] ++ tau2 A) A1
+      hA_mem hA_tau1
+  have h_tile_eq : tile = noMoveTile tm q t.head qNew w := by
+    simp only [transitionTilesFor] at h_tile_in
+    rw [htr] at h_tile_in
+    exact List.mem_singleton.mp h_tile_in
+  subst h_tile_eq
+  have hA2_tau1 : tau1 A2 = liftTape tm t.right.toList ++ [#] ++ tau2 A := by
+    have key := hA_tau1
+    rw [hA1_decomp, tau1_cons, noMoveTile_top] at key
+    simpa using key
+  obtain ⟨A3, hA2, hA3_mem, hA3_tau1, hA3_tau2⟩ :=
+    copy_prefix_forced tm t.right.toList A2
+      ([#] ++ tau2 A) hA2_mem
+      (by simpa [List.append_assoc] using hA2_tau1)
+      (by intro x h; injection h with h1 _; cases h1)
+      (by intro q' x h; injection h with h1 _; cases h1)
+  obtain ⟨A4, hA3_decomp, hA4_tau1, hA4_mem⟩ :=
+    sep_forced tm (tau2 A) A3 hA3_mem (by simpa using hA3_tau1)
+  refine ⟨A4, ?_, hA4_mem, ?_⟩
+  · rw [hA, hA1_decomp, hA2, hA3_decomp]
+    simp only [stepTilesNoMove, List.append_assoc, List.cons_append,
+               List.nil_append]
+  · rw [hA4_tau1, hA_tau2, hA1_decomp, tau2_cons, noMoveTile_bot, hA3_tau2,
+        hA3_decomp, tau2_cons, sepTile_bot]
+    cases qNew with
+    | none =>
+      simp [encodeCfg_halted, encodeHaltedCfg, BiTape.write,
+            stateMarker_none, liftTape_cons, List.append_assoc]
+    | some q' =>
+      simp [encodeCfg_running, encodeRunningCfg, BiTape.write,
+            stateMarker_some, liftTape_cons, List.append_assoc]
+
+/-- Right-move interior case. -/
+private lemma starts_with_stepTilesRightInterior (tm : SingleTapeTM Symbol)
+    (q : tm.State) (t : BiTape Symbol)
+    (qNew : Option tm.State) (w : Option Symbol)
+    (htr : tm.tr q t.head = (⟨w, some Dir.right⟩, qNew))
+    (h_right_ne : t.right.toList ≠ [])
+    (h_nondeg : w ≠ none ∨ t.left.toList ≠ [])
+    (A : Stack (Alpha tm.State Symbol))
+    (h_mem : ∀ s ∈ A, s ∈ luTiles tm)
+    (h_eq : tau1 A = encodeRunningCfg tm q t ++ [#] ++ tau2 A) :
+    ∃ A' : Stack (Alpha tm.State Symbol),
+        A = stepTilesRightInterior tm q qNew t w ++ A' ∧
+        (∀ s ∈ A', s ∈ luTiles tm) ∧
+        tau1 A' = encodeCfg tm ⟨qNew, (t.write w).move_right⟩ ++ [#] ++ tau2 A' := by
+  have h_not_left : ∀ (qN : Option tm.State) (w' : Option Symbol),
+      tm.tr q t.head ≠ (⟨w', some Dir.left⟩, qN) := by
+    intro qN w' h
+    rw [htr] at h
+    injection h with h1 _
+    injection h1 with _ h_dir
+    injection h_dir with h_dir2
+    cases h_dir2
+  have h_eq' : tau1 A = liftTape tm t.left.toList.reverse ++ ↟ₛq :: ↟ₜt.head ::
+      (liftTape tm t.right.toList ++ [#] ++ tau2 A) := by
+    simpa [encodeRunningCfg, liftTape_cons, List.append_assoc] using h_eq
+  obtain ⟨A1, hA, hA_mem, hA_tau1, hA_tau2⟩ :=
+    copy_prefix_forced_state_lead tm q t.head h_not_left
+      t.left.toList.reverse A
+      (liftTape tm t.right.toList ++ [#] ++ tau2 A) h_mem h_eq'
+  obtain ⟨tile, A2, hA1_decomp, h_tile_in, hA2_mem⟩ :=
+    transition_forced tm q t.head
+      (liftTape tm t.right.toList ++ [#] ++ tau2 A) A1
+      hA_mem hA_tau1
+  simp only [transitionTilesFor] at h_tile_in
+  rw [htr] at h_tile_in
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at h_tile_in
+  rcases h_tile_in with rfl | rfl
+  · -- tile = rightMoveTile (intended)
+    have hA2_tau1 : tau1 A2 = liftTape tm t.right.toList ++ [#] ++ tau2 A := by
+      have key := hA_tau1
+      rw [hA1_decomp, tau1_cons, rightMoveTile_top] at key
+      simpa using key
+    obtain ⟨A3, hA2, hA3_mem, hA3_tau1, hA3_tau2⟩ :=
+      copy_prefix_forced tm t.right.toList A2
+        ([#] ++ tau2 A) hA2_mem
+        (by simpa [List.append_assoc] using hA2_tau1)
+        (by intro x h; injection h with h1 _; cases h1)
+        (by intro q' x h; injection h with h1 _; cases h1)
+    obtain ⟨A4, hA3_decomp, hA4_tau1, hA4_mem⟩ :=
+      sep_forced tm (tau2 A) A3 hA3_mem (by simpa using hA3_tau1)
+    refine ⟨A4, ?_, hA4_mem, ?_⟩
+    · rw [hA, hA1_decomp, hA2, hA3_decomp]
+      simp only [stepTilesRightInterior, List.append_assoc, List.cons_append,
+                 List.nil_append]
+    · rw [hA4_tau1, hA_tau2, hA1_decomp, tau2_cons, rightMoveTile_bot,
+          hA3_tau2, hA3_decomp, tau2_cons, sepTile_bot,
+          encodeCfg_after_right_move_eq tm qNew t w h_nondeg h_right_ne]
+      simp [List.append_assoc]
+  · -- tile = rightMoveBoundaryTile (must be ruled out: t.right ≠ []).
+    exfalso
+    have key := hA_tau1
+    rw [hA1_decomp, tau1_cons, rightMoveBoundaryTile_top] at key
+    cases h_rt : t.right.toList with
+    | nil => exact h_right_ne h_rt
+    | cons c cs =>
+      rw [h_rt] at key
+      simp only [liftTape_cons, List.cons_append, List.nil_append] at key
+      injection key with _ key
+      injection key with _ key
+      injection key with h_third _
+      cases h_third
+
+/-- Left-move boundary case (t.left empty). -/
+private lemma starts_with_stepTilesLeftBoundary (tm : SingleTapeTM Symbol)
+    (q : tm.State) (t : BiTape Symbol)
+    (qNew : Option tm.State) (w : Option Symbol)
+    (htr : tm.tr q t.head = (⟨w, some Dir.left⟩, qNew))
+    (h_left_empty : t.left.toList = [])
+    (h_nondeg : w ≠ none ∨ t.right.toList ≠ [])
+    (A : Stack (Alpha tm.State Symbol))
+    (h_mem : ∀ s ∈ A, s ∈ luTiles tm)
+    (h_eq : tau1 A = encodeRunningCfg tm q t ++ [#] ++ tau2 A) :
+    ∃ A' : Stack (Alpha tm.State Symbol),
+        A = stepTilesLeftBoundary tm q qNew t w ++ A' ∧
+        (∀ s ∈ A', s ∈ luTiles tm) ∧
+        tau1 A' = encodeCfg tm ⟨qNew, (t.write w).move_left⟩ ++ [#] ++ tau2 A' := by
+  have h_eq' : tau1 A =
+      ↟ₛq :: ↟ₜt.head :: (liftTape tm t.right.toList ++ [#] ++ tau2 A) := by
+    simpa [encodeRunningCfg, liftTape_cons, h_left_empty,
+           List.append_assoc] using h_eq
+  obtain ⟨tile, A1, hA_decomp, h_tile_in, hA1_mem⟩ :=
+    transition_forced tm q t.head
+      (liftTape tm t.right.toList ++ [#] ++ tau2 A) A
+      h_mem h_eq'
+  simp only [transitionTilesFor] at h_tile_in
+  rw [htr] at h_tile_in
+  simp only [List.mem_cons, List.mem_map] at h_tile_in
+  rcases h_tile_in with rfl | ⟨b, _, rfl⟩
+  · -- tile = leftMoveBoundaryTile (intended).
+    have hA_tau1 : tau1 A = [↟ₛq, ↟ₜt.head] ++ tau1 A1 := by
+      rw [hA_decomp, tau1_cons, leftMoveBoundaryTile_top]
+    have hA1_tau1 : tau1 A1 = liftTape tm t.right.toList ++ [#] ++ tau2 A := by
+      rw [hA_tau1] at h_eq'
+      simpa using h_eq'
+    obtain ⟨A2, hA1_decomp, hA2_mem, hA2_tau1, hA2_tau2⟩ :=
+      copy_prefix_forced tm t.right.toList A1
+        ([#] ++ tau2 A) hA1_mem
+        (by simpa [List.append_assoc] using hA1_tau1)
+        (by intro x h; injection h with h1 _; cases h1)
+        (by intro q' x h; injection h with h1 _; cases h1)
+    obtain ⟨A3, hA2_decomp, hA3_tau1, hA3_mem⟩ :=
+      sep_forced tm (tau2 A) A2 hA2_mem (by simpa using hA2_tau1)
+    refine ⟨A3, ?_, hA3_mem, ?_⟩
+    · rw [hA_decomp, hA1_decomp, hA2_decomp]
+      simp only [stepTilesLeftBoundary, List.append_assoc, List.cons_append,
+                 List.nil_append]
+    · rw [hA3_tau1, hA_decomp, tau2_cons, leftMoveBoundaryTile_bot, hA2_tau2,
+          hA2_decomp, tau2_cons, sepTile_bot,
+          encodeCfg_after_left_move_boundary_eq tm qNew t w h_nondeg h_left_empty]
+      simp [List.append_assoc]
+  · -- tile = leftMoveTile q t.head qNew w b — ruled out by lead mismatch.
+    exfalso
+    have key := h_eq'
+    rw [hA_decomp, tau1_cons, leftMoveTile_top] at key
+    simp only [List.cons_append, List.nil_append] at key
+    injection key with h_head _
+    cases h_head
 
 end PCP.LuToMPCP

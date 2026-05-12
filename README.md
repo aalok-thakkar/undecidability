@@ -56,6 +56,10 @@ ROADMAP.md                   -- Detailed proof plan and next steps.
 | Lu→MPCP: forward direction    | ✅ complete  |
 | Lu→MPCP: `mem_luTiles_top`    | ✅ complete  |
 | Lu→MPCP: `copy_prefix_forced` | ✅ complete  |
+| Lu→MPCP: `transition_forced`  | ✅ complete  |
+| Lu→MPCP: backward step (no-move) | ✅ complete  |
+| Lu→MPCP: backward step (right interior) | ✅ complete  |
+| Lu→MPCP: backward step (left boundary)  | ✅ complete  |
 | Lu→MPCP: backward direction   | 🚧 in progress |
 
 The development contains **no `sorry`**. Verified against

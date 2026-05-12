@@ -99,15 +99,37 @@ recover a halting computation of `tm` on `w`.
    `leftMoveTile`, whose second char is `↟ₛ_`, nor `absorbLeftTile`,
    whose second char is `h⊥`).
 
-3. **`transition_forced`** — when the lead starts with `↟ₛq`, the only
-   tiles in `luTiles` with a top beginning with `↟ₛq` are transition
-   tiles for `(q, a)`.  `transitionTilesFor` ensures exactly one variant
-   (no-move, right, or left) is present, uniquely determined by
-   `tm.tr q a`.
+3. ✅ **`transition_forced`** — when `tau1 A = ↟ₛq :: ↟ₜa :: rest` and
+   every tile of `A` is in `luTiles tm`, the head of `A` is a tile in
+   `transitionTilesFor tm q a`.  The six non-transition cases of
+   `mem_luTiles_top` (copy / sep / leftMove / absorbLeft / absorbRight /
+   final) all have a top whose first character is not `↟ₛq`, ruling them
+   out by `Alpha` constructor disequality.  The four valid cases
+   (`noMoveTile`, `rightMoveTile`, `rightMoveBoundaryTile`,
+   `leftMoveBoundaryTile`) match `[↟ₛq', ↟ₜa', …]` against the lead,
+   forcing `q' = q` and `a' = a`.
 
 4. **`starts_with_stepTiles`** — combines the copy and transition forcing
    to show `A = stepTiles tm q tape ++ A'` and the residual invariant
-   holds for `(stepResult tm q tape, A')`.
+   holds for `(stepResult tm q tape, A')`.  Three of the five sub-cases
+   are done:
+   * ✅ `starts_with_stepTilesNoMove`
+   * ✅ `starts_with_stepTilesRightInterior`
+   * ✅ `starts_with_stepTilesLeftBoundary`
+   * 🚧 `starts_with_stepTilesRightBoundary`  — needs an auxiliary
+     lemma ruling out an alternative `rightMoveTile :: sepTile`
+     decomposition whose residual invariant `liftTape t.left.reverse ++
+     [↟ₜw, stateMarker qNew, #] ++ tau2 A'` does not encode any
+     `tm.Cfg` (the state marker sits adjacent to `#` with no head
+     symbol between).
+   * 🚧 `starts_with_stepTilesLeftInterior` — similar ambiguity between
+     `copyTile :: leftMoveBoundaryTile` and `leftMoveTile`.
+
+   Helpers proved en route:
+   * ✅ `copy_prefix_forced_state_lead` — strip copies right up to `↟ₛq`
+     when `tm.tr q a` is *not* a left move.  No `leftMoveTile` can
+     swallow the last copy together with `↟ₛq`.
+   * ✅ `sep_forced` — if the lead is `#`, the head tile is `sepTile`.
 
 5. **`backward_halt`** — for a halted cfg `⟨none, tape⟩`, the absorption
    tiles force `A` to start with `absorbAndFinish ...`, which closes with
