@@ -83,16 +83,21 @@ recover a halting computation of `tm` on `w`.
 
 **Proof strategy** (induction on `A.length`):
 
-1. **`mem_luTiles_top`** — complete characterisation of tile tops in
-   `luTiles`: every top is one of `[↟ₜa]`, `[#]`, `[↟ₛq, ↟ₜa]`,
-   `[↟ₛq, ↟ₜa, #]`, `[↟ₜb, ↟ₛq, ↟ₜa]`, `[↟ₜa, h⊥]`, `[h⊥, ↟ₜa]`,
-   or `[h⊥, #, #]`.
+1. ✅ **`mem_luTiles_top`** — complete characterisation of every tile in
+   `luTiles`: each `t ∈ luTiles tm` is identified as one of eight
+   concrete tiles (`copyTile a`, `sepTile`, `noMoveTile`/`rightMoveTile`
+   /`rightMoveBoundaryTile`/`leftMoveBoundaryTile`/`leftMoveTile`
+   together with the matching `tm.tr q a` equation, `absorbLeftTile a`,
+   `absorbRightTile a`, or `finalTile`).  Used everywhere downstream
+   to identify the next tile from its top character.
 
-2. **`copy_prefix_forced`** — if the invariant lead starts with
-   `liftTape tm L` (all tape-lift symbols) and `L ≠ []`, the tile
-   sequence starts with `L.map (copyTile tm)`.  Key: `liftTape` symbols
-   can only be consumed by `copyTile` (not `leftMoveTile`, whose second
-   char is `↟ₛ_`, nor `absorbLeftTile`, whose second char is `h⊥`).
+2. ✅ **`copy_prefix_forced`** — if `tau1 A = liftTape tm L ++ tail`,
+   `(∀ t ∈ A, t ∈ luTiles tm)`, and `tail` does not start with `h⊥` or
+   `↟ₛq`, then `A = L.map (copyTile tm) ++ A'` with
+   `tau1 A' = tail` and `tau2 A = liftTape tm L ++ tau2 A'`.  Key:
+   `liftTape` symbols can only be consumed by `copyTile` (not
+   `leftMoveTile`, whose second char is `↟ₛ_`, nor `absorbLeftTile`,
+   whose second char is `h⊥`).
 
 3. **`transition_forced`** — when the lead starts with `↟ₛq`, the only
    tiles in `luTiles` with a top beginning with `↟ₛq` are transition

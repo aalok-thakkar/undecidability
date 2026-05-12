@@ -1832,22 +1832,32 @@ with `cfg = initCfg tm w`.
 
 -/
 
-/-! ## Step 1: Characterise every tile top in `luTiles` -/
+/-! ## Step 1: Characterise every tile of `luTiles` -/
 
-/-- Every tile `t` in `luTiles tm` has a top of one of these eight shapes:
-`[↟ₜa]`, `[#]`, `[↟ₛq, ↟ₜa]`, `[↟ₛq, ↟ₜa, #]`, `[↟ₜb, ↟ₛq, ↟ₜa]`,
-`[↟ₜa, h⊥]`, `[h⊥, ↟ₜa]`, or `[h⊥, #, #]`. -/
+/-- Every tile `t` in `luTiles tm` is one of eight concrete tiles
+(copy, separator, no-move/right/left transition, absorb-left/right,
+or final). For each case we also expose the relevant TM-transition
+equation so the bot of a transition tile is determined. -/
 private lemma mem_luTiles_top (tm : SingleTapeTM Symbol)
     (t : Tile (Alpha tm.State Symbol)) (ht : t ∈ luTiles tm) :
-    (∃ a : Option Symbol, t.top = [↟ₜa]) ∨
-    t.top = [#] ∨
-    (∃ (q : tm.State) (a : Option Symbol), t.top = [↟ₛq, ↟ₜa]) ∨
-    (∃ (q : tm.State) (a : Option Symbol), t.top = [↟ₛq, ↟ₜa, #]) ∨
-    (∃ (b : Option Symbol) (q : tm.State) (a : Option Symbol),
-        t.top = [↟ₜb, ↟ₛq, ↟ₜa]) ∨
-    (∃ a : Option Symbol, t.top = [↟ₜa, h⊥]) ∨
-    (∃ a : Option Symbol, t.top = [h⊥, ↟ₜa]) ∨
-    t.top = [h⊥, #, #] := by
+    (∃ a : Option Symbol, t = copyTile tm a) ∨
+    t = sepTile tm ∨
+    (∃ (q : tm.State) (a : Option Symbol) (qNew : Option tm.State)
+       (w : Option Symbol),
+        tm.tr q a = (⟨w, none⟩, qNew) ∧ t = noMoveTile tm q a qNew w) ∨
+    (∃ (q : tm.State) (a : Option Symbol) (qNew : Option tm.State)
+       (w : Option Symbol),
+        tm.tr q a = (⟨w, some Dir.right⟩, qNew) ∧
+          (t = rightMoveTile tm q a qNew w ∨
+           t = rightMoveBoundaryTile tm q a qNew w)) ∨
+    (∃ (q : tm.State) (a : Option Symbol) (qNew : Option tm.State)
+       (w : Option Symbol),
+        tm.tr q a = (⟨w, some Dir.left⟩, qNew) ∧
+          (t = leftMoveBoundaryTile tm q a qNew w ∨
+           ∃ b : Option Symbol, t = leftMoveTile tm q a qNew w b)) ∨
+    (∃ a : Option Symbol, t = absorbLeftTile tm a) ∨
+    (∃ a : Option Symbol, t = absorbRightTile tm a) ∨
+    t = finalTile tm := by
   simp only [luTiles, List.mem_append, List.mem_singleton] at ht
   -- ht has left-nested shape: (((copyTiles ∨ sepTile) ∨ transitionTiles) ∨ absorbTiles) ∨ finalTile
   rcases ht with ((((ht | rfl) | ht) | ht) | rfl)
@@ -1855,7 +1865,7 @@ private lemma mem_luTiles_top (tm : SingleTapeTM Symbol)
     simp only [copyTiles, List.mem_map] at ht
     obtain ⟨a, _, rfl⟩ := ht
     exact Or.inl ⟨a, rfl⟩
-  · -- t = sepTile tm; top = [#]
+  · -- t = sepTile tm
     exact Or.inr (Or.inl rfl)
   · -- t ∈ transitionTiles tm
     simp only [transitionTiles, List.mem_flatMap] at ht
@@ -1867,7 +1877,7 @@ private lemma mem_luTiles_top (tm : SingleTapeTM Symbol)
       rw [h_tr] at ht
       simp only [List.mem_singleton] at ht
       subst ht
-      exact Or.inr (Or.inr (Or.inl ⟨q, a, rfl⟩))
+      exact Or.inr (Or.inr (Or.inl ⟨q, a, qNew, w, h_tr, rfl⟩))
     | some d =>
       cases d with
       | right =>
@@ -1875,22 +1885,118 @@ private lemma mem_luTiles_top (tm : SingleTapeTM Symbol)
         rw [h_tr] at ht
         simp only [List.mem_cons, List.mem_nil_iff, or_false] at ht
         rcases ht with rfl | rfl
-        · exact Or.inr (Or.inr (Or.inl ⟨q, a, rfl⟩))
-        · exact Or.inr (Or.inr (Or.inr (Or.inl ⟨q, a, rfl⟩)))
+        · exact Or.inr (Or.inr (Or.inr (Or.inl
+            ⟨q, a, qNew, w, h_tr, Or.inl rfl⟩)))
+        · exact Or.inr (Or.inr (Or.inr (Or.inl
+            ⟨q, a, qNew, w, h_tr, Or.inr rfl⟩)))
       | left =>
         simp only [transitionTilesFor] at ht
         rw [h_tr] at ht
         simp only [List.mem_cons, List.mem_map] at ht
         rcases ht with rfl | ⟨b, _, rfl⟩
-        · exact Or.inr (Or.inr (Or.inl ⟨q, a, rfl⟩))
-        · exact Or.inr (Or.inr (Or.inr (Or.inr (Or.inl ⟨b, q, a, rfl⟩))))
+        · exact Or.inr (Or.inr (Or.inr (Or.inr (Or.inl
+            ⟨q, a, qNew, w, h_tr, Or.inl rfl⟩))))
+        · exact Or.inr (Or.inr (Or.inr (Or.inr (Or.inl
+            ⟨q, a, qNew, w, h_tr, Or.inr ⟨b, rfl⟩⟩))))
   · -- t ∈ absorbTiles tm
     simp only [absorbTiles, List.mem_flatMap, absorbTilesFor,
                List.mem_cons, List.mem_nil_iff, or_false] at ht
     obtain ⟨a, _, (rfl | rfl)⟩ := ht
     · exact Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inl ⟨a, rfl⟩)))))
     · exact Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inl ⟨a, rfl⟩))))))
-  · -- t = finalTile tm; top = [h⊥, #, #]
+  · -- t = finalTile tm
     exact Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr rfl))))))
+
+/-! ## Step 2: `copy_prefix_forced` — tape-lift prefix forces copy tiles -/
+
+/-- The `liftTape tm L`-prefix of `tau1 A` forces `A` to begin with copy
+tiles for `L`, provided `tail` does not start with `h⊥` (which would let
+an `absorbLeftTile` consume the last lift) or with a state symbol `↟ₛq`
+(which would let a `leftMoveTile` consume the last lift). Both `tau1` and
+`tau2` are transparent through the forced copy prefix. -/
+private lemma copy_prefix_forced (tm : SingleTapeTM Symbol) :
+    ∀ (L : List (Option Symbol)) (A : Stack (Alpha tm.State Symbol))
+      (tail : List (Alpha tm.State Symbol)),
+      (∀ t ∈ A, t ∈ luTiles tm) →
+      tau1 A = liftTape tm L ++ tail →
+      (∀ x : List (Alpha tm.State Symbol), tail ≠ h⊥ :: x) →
+      (∀ (q : tm.State) (x : List (Alpha tm.State Symbol)),
+          tail ≠ ↟ₛq :: x) →
+      ∃ A' : Stack (Alpha tm.State Symbol),
+          A = L.map (copyTile tm) ++ A' ∧
+          (∀ t ∈ A', t ∈ luTiles tm) ∧
+          tau1 A' = tail ∧
+          tau2 A = liftTape tm L ++ tau2 A' := by
+  intro L
+  induction L with
+  | nil =>
+    intro A tail h_mem h_eq _ _
+    exact ⟨A, by simp, h_mem, by simpa using h_eq, by simp⟩
+  | cons a L ih =>
+    intro A tail h_mem h_eq h_not_halt h_not_state
+    cases A with
+    | nil => simp [liftTape_cons] at h_eq
+    | cons t A_rest =>
+      have h_t_mem : t ∈ luTiles tm := h_mem t (List.mem_cons_self ..)
+      have h_rest_mem : ∀ s ∈ A_rest, s ∈ luTiles tm :=
+        fun s hs => h_mem s (List.mem_cons_of_mem t hs)
+      rw [tau1_cons, liftTape_cons, List.cons_append] at h_eq
+      -- The eight cases of `mem_luTiles_top`, in order:
+      -- copy, sep, noMove, right(/-boundary), leftBoundary(/leftInterior),
+      -- absorbLeft, absorbRight, final.
+      rcases mem_luTiles_top tm t h_t_mem with
+          ⟨a', rfl⟩
+        | rfl
+        | ⟨_, _, _, _, _, rfl⟩
+        | ⟨_, _, _, _, _, rfl | rfl⟩
+        | ⟨q', _, _, _, _, rfl | ⟨_, rfl⟩⟩
+        | ⟨_, rfl⟩
+        | ⟨_, rfl⟩
+        | rfl
+      · -- copyTile a': peel off and recurse.
+        simp only [copyTile_top, List.cons_append, List.nil_append] at h_eq
+        injection h_eq with h_head h_tail
+        injection h_head with h_a
+        subst h_a
+        obtain ⟨A', hA, hA_mem, hA_tau1, hA_tau2⟩ :=
+          ih A_rest tail h_rest_mem h_tail h_not_halt h_not_state
+        refine ⟨A', ?_, hA_mem, hA_tau1, ?_⟩
+        · simp [List.map_cons, hA]
+        · simp [tau2_cons, copyTile_bot, hA_tau2, liftTape_cons]
+      -- The next five cases each have a top whose first character is not
+      -- a tape lift (`#`, `↟ₛq'`, or `h⊥`), immediately contradicting
+      -- `h_eq` via constructor disequality.
+      · simp at h_eq                      -- sepTile
+      · simp at h_eq                      -- noMoveTile
+      · simp at h_eq                      -- rightMoveTile
+      · simp at h_eq                      -- rightMoveBoundaryTile
+      · simp at h_eq                      -- leftMoveBoundaryTile
+      · -- leftMoveTile: the *second* character of the top is `↟ₛq'`. It
+        -- must match the next character of `liftTape tm L ++ tail`, which
+        -- is a tape lift if `L ≠ []` (constructor mismatch) and ruled out
+        -- by `h_not_state` if `L = []`.
+        simp only [leftMoveTile_top, List.cons_append, List.nil_append] at h_eq
+        injection h_eq with _ h_rest
+        cases L with
+        | nil =>
+          simp only [liftTape_nil, List.nil_append] at h_rest
+          exact (h_not_state q' _ h_rest.symm).elim
+        | cons _ _ =>
+          simp only [liftTape_cons, List.cons_append] at h_rest
+          injection h_rest with h_h
+          cases h_h
+      · -- absorbLeftTile: same idea, with second character `h⊥`.
+        simp only [absorbLeftTile_top, List.cons_append, List.nil_append] at h_eq
+        injection h_eq with _ h_rest
+        cases L with
+        | nil =>
+          simp only [liftTape_nil, List.nil_append] at h_rest
+          exact (h_not_halt _ h_rest.symm).elim
+        | cons _ _ =>
+          simp only [liftTape_cons, List.cons_append] at h_rest
+          injection h_rest with h_h
+          cases h_h
+      · simp at h_eq                      -- absorbRightTile
+      · simp at h_eq                      -- finalTile
 
 end PCP.LuToMPCP

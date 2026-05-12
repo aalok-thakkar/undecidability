@@ -54,6 +54,8 @@ ROADMAP.md                   -- Detailed proof plan and next steps.
 | Lu→MPCP: left-move step       | ✅ complete  |
 | Lu→MPCP: halt absorption      | ✅ complete  |
 | Lu→MPCP: forward direction    | ✅ complete  |
+| Lu→MPCP: `mem_luTiles_top`    | ✅ complete  |
+| Lu→MPCP: `copy_prefix_forced` | ✅ complete  |
 | Lu→MPCP: backward direction   | 🚧 in progress |
 
 The development contains **no `sorry`**. Verified against
