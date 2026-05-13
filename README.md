@@ -53,8 +53,9 @@ ROADMAP.md                   -- Detailed proof plan and next steps.
 | `Halts` predicate for `SingleTapeTM`                       | ✅ complete           |
 | `Lu ≤_m MPCP`: tile set + HUM refactor (`NoLeftBoundary`)  | ✅ complete           |
 | `Lu ≤_m MPCP`: forward direction (`Halts → MHasSolution`)  | ✅ complete           |
-| `Lu ≤_m MPCP`: backward direction (`MHasSolution → Halts`) | 🚧 ~80% (see below)   |
-| Final theorem `lu_le_mpcp`                                 | 🚧 not yet            |
+| `Lu ≤_m MPCP`: backward direction (strong-A form)          | ✅ complete           |
+| `lu_le_mpcp` (strong-A `Iff`)                              | ✅ complete           |
+| `Halts ↔ MHasSolution` (canonical `Iff` with start tile)   | 🚧 forward only       |
 
 ## What is proved
 
@@ -94,11 +95,11 @@ Top-level lemma: `halts_implies_mhasSolution`
 `(tm : SingleTapeTM Symbol) (h_nbw : NoBlankWrites tm) (w : List Symbol)`
 `(h_nlb : NoLeftBoundary tm w) (h : Halts tm w) : MHasSolution …`.
 
-### `Lu ≤_m MPCP` (backward) — partial
+### `Lu ≤_m MPCP` (backward) — strong-A iff complete
 
 The backward direction inverts the forward construction. Strategy:
 strong induction on `A.length`, peeling one canonical "block" off the
-front of `A` per TM step. Pieces in place:
+front of `A` per TM step.
 
 | Lemma                                  | Role                                             | Status |
 |----------------------------------------|--------------------------------------------------|--------|
@@ -112,48 +113,39 @@ front of `A` per TM step. Pieces in place:
 | `starts_with_stepTilesRightInterior`   | Backward step, right-move, `t.right ≠ []`        | ✅ |
 | `starts_with_stepTilesRightBoundary`   | Backward step, right-move, `t.right = []`, `qNew = some _` | ✅ |
 | `starts_with_stepTilesLeftInterior`    | Backward step, left-move, `t.left ≠ []`          | ✅ |
-| `starts_with_absorbAndFinish`          | Backward extraction for halted cfg               | 🚧 |
-| `backward_aux`                         | Main strong-induction driver                     | 🚧 |
-| `mhasSolution_implies_halts`           | Top-level backward theorem                       | 🚧 |
+| `backward_aux`                         | Main strong-induction driver (strong hypothesis) | ✅ |
+| `lu_le_mpcp` (strong-A iff)            | Top-level theorem                                | ✅ |
 
 The left-boundary sub-case of Step 4 is *removed* by the HUM refactor:
 the `NoLeftBoundary` constraint ensures no reachable cfg ever invokes a
 left-move at the left boundary, so no corresponding sub-lemma is needed.
 
+The halt-now sub-case in `backward_aux` is handled directly (single TM
+step to a halted cfg, then `ReflTransGen.refl`) — this sidesteps the
+need for a `starts_with_absorbAndFinish` lemma, which would otherwise
+fail because the absorption-phase decomposition is non-unique (e.g.
+`[copyTile l, absorbRightTile r, sepTile, absorbLeftTile l, sepTile,
+finalTile]` is a valid alternative to the canonical
+`absorbAndFinish [l] [r]`).
+
 ## Next steps
 
-In order, the three remaining pieces of the backward direction:
+The remaining piece toward the canonical `Halts ↔ MHasSolution` iff is
+the **membership-purification step**: showing that any solution `A`
+drawn from `startTile :: luTiles tm` (the MHasSolution form) can be
+purified to use only `luTiles tm` tiles (the strong-A form already
+proved). At every block boundary the matching invariant's lookahead
+starts with a tape lift, state marker, or `h⊥` — never `#` — so
+`startTile` (top `[#]`) is ruled out by character mismatch. Within a
+step block, `copy_prefix_forced` / `transition_forced` /
+`copy_prefix_forced_state_lead` already rule out `startTile` by similar
+analysis. The remaining ambiguity is at the `sepTile` position, where
+the lookahead is `# :: …` and `startTile.top = [#]` matches. Resolving
+this requires either:
 
-1. **`starts_with_absorbAndFinish`** — for a halted cfg `⟨none, tape⟩`,
-   force `A` to start with `absorbAndFinish tape.left.toList
-   (tape.head :: tape.right.toList)`. Same flavour as the step lemmas:
-   force copies up to the `h⊥` marker, peel absorption iterations, then
-   close with `finalTile`. Estimated ~150 LoC.
+* Extending `sep_forced` with a tau2-side disambiguation hypothesis, or
+* Threading an "extra encoding accumulator" through `backward_aux` to
+  reflect the doubled lookahead `tau1 A = encodeCfg cfg ++ [#] ++ extra
+  ++ tau2 A` that arises after `startTile` mid-stream.
 
-2. **`backward_aux`** — strong induction on `A.length`. Three cases:
-   * `A = []` → contradiction (matching invariant requires a non-empty
-     lookahead).
-   * `cfg = ⟨none, _⟩` → apply `starts_with_absorbAndFinish`; recurse on
-     a shorter `A'` and close with `ReflTransGen.refl`.
-   * `cfg = ⟨some q, tape⟩` → dispatch on `tm.tr q tape.head`:
-     - If `qNew = none` (halt-now), produce the single TM step
-       `cfg → ⟨none, …⟩` directly and conclude.
-     - Otherwise apply the appropriate `starts_with_stepTiles*` lemma
-       (each requires `qNew = some _`), get a shorter `A'`, recurse,
-       chain the TM step.
-
-   Estimated ~100 LoC.
-
-3. **Final theorem `lu_le_mpcp`**:
-   ```lean
-   theorem lu_le_mpcp (tm : SingleTapeTM Symbol) (w : List Symbol)
-       (h_nbw : NoBlankWrites tm) (h_nlb : NoLeftBoundary tm w) :
-       Halts tm w ↔ MHasSolution (startTile tm w) (luTiles tm)
-   ```
-   Forward direction: `halts_implies_mhasSolution` (done).
-   Backward direction: unpack `MHasSolution`, cancel the leading `[#]`
-   from the matching equation, call `backward_aux` with
-   `cfg = initCfg tm w`. Estimated ~30 LoC.
-
-See `ROADMAP.md` for a more detailed plan including dependencies between
-the remaining lemmas.
+See `ROADMAP.md` for the detailed dependency tree.
