@@ -13,6 +13,12 @@ Lu ≤_m MPCP ≤_m PCP
 - **PCP**: the Hopcroft–Ullman symbol-padding technique reduces forced-start
   MPCP to general PCP.
 
+The `Lu ≤_m MPCP` reduction follows the **Hopcroft–Ullman–Motwani
+one-sided-tape design**: the simulation tile set does not include a
+`leftMoveBoundaryTile`, and the TM is required to satisfy
+`NoLeftBoundary` (no left-move at the left tape boundary) in addition
+to the standard `NoBlankWrites` (no blank symbol written).
+
 The development uses [`cslib`](https://github.com/leanprover/cslib)'s
 `Turing.SingleTapeTM` for the Turing-machine machinery and follows
 cslib's conventions (module-style headers, `public import`,
@@ -40,15 +46,15 @@ ROADMAP.md                   -- Detailed proof plan and next steps.
 
 ## Status
 
-| Component                                              | Status         |
-|--------------------------------------------------------|----------------|
-| Core PCP / MPCP API                                    | ✅ complete    |
-| `MPCP ≤_m PCP` (full `mpcp_iff_pcp`)                   | ✅ complete    |
-| `Halts` predicate for `SingleTapeTM`                   | ✅ complete    |
-| `Lu ≤_m MPCP`: tile-set infrastructure                 | ✅ complete    |
-| `Lu ≤_m MPCP`: forward direction (`Halts → MHasSolution`) | ✅ complete |
-| `Lu ≤_m MPCP`: backward direction (`MHasSolution → Halts`) | 🚧 ~80% (see below) |
-| Final theorem `lu_le_mpcp`                             | 🚧 not yet    |
+| Component                                                  | Status                |
+|------------------------------------------------------------|-----------------------|
+| Core PCP / MPCP API                                        | ✅ complete           |
+| `MPCP ≤_m PCP` (full `mpcp_iff_pcp`)                       | ✅ complete           |
+| `Halts` predicate for `SingleTapeTM`                       | ✅ complete           |
+| `Lu ≤_m MPCP`: tile set + HUM refactor (`NoLeftBoundary`)  | ✅ complete           |
+| `Lu ≤_m MPCP`: forward direction (`Halts → MHasSolution`)  | ✅ complete           |
+| `Lu ≤_m MPCP`: backward direction (`MHasSolution → Halts`) | 🚧 ~80% (see below)   |
+| Final theorem `lu_le_mpcp`                                 | 🚧 not yet            |
 
 ## What is proved
 
@@ -62,9 +68,10 @@ complete forward and backward directions.
 
 ### `Lu ≤_m MPCP` (forward) — `PCP/Reductions/LuToMPCP.lean`
 
-Given `Halts tm w` (with the `NoBlankWrites` side condition), constructs
-a tile sequence `A ⊆ startTile :: luTiles tm` satisfying the MPCP matching
-equation. The proof:
+Given `Halts tm w` together with the two side conditions `NoBlankWrites`
+and `NoLeftBoundary`, constructs a tile sequence
+`A ⊆ startTile :: luTiles tm` satisfying the MPCP matching equation.
+The proof:
 
 1. Prepends `stepTiles tm q tape` for each TM step, dispatching over
    transition direction × tape-boundary status:
@@ -75,13 +82,17 @@ equation. The proof:
    | Right (interior)  | `left-copies · rightMoveTile · right-copies · sep` |
    | Right (boundary)  | `left-copies · rightMoveBoundaryTile`              |
    | Left (interior)   | `tail-copies · leftMoveTile · right-copies · sep`  |
-   | Left (boundary)   | `leftMoveBoundaryTile · right-copies · sep`        |
+
+   The **left-boundary case is unreachable** under `NoLeftBoundary`, so
+   no corresponding tile group is needed.
 
 2. Closes with `absorbAndFinish` once the TM halts: iteratively absorbs
    tape symbols via `absorbLeftTile`/`absorbRightTile`, then applies
    `finalTile` to equalise top and bot.
 
-Top-level lemma: `halts_implies_mhasSolution`.
+Top-level lemma: `halts_implies_mhasSolution`
+`(tm : SingleTapeTM Symbol) (h_nbw : NoBlankWrites tm) (w : List Symbol)`
+`(h_nlb : NoLeftBoundary tm w) (h : Halts tm w) : MHasSolution …`.
 
 ### `Lu ≤_m MPCP` (backward) — partial
 
@@ -105,39 +116,44 @@ front of `A` per TM step. Pieces in place:
 | `backward_aux`                         | Main strong-induction driver                     | 🚧 |
 | `mhasSolution_implies_halts`           | Top-level backward theorem                       | 🚧 |
 
-The left-boundary case is *removed* by the HUM refactor (the
-`NoLeftBoundary` constraint ensures no reachable cfg ever invokes a
-left-move at the left boundary, so no corresponding sub-lemma is
-needed).
+The left-boundary sub-case of Step 4 is *removed* by the HUM refactor:
+the `NoLeftBoundary` constraint ensures no reachable cfg ever invokes a
+left-move at the left boundary, so no corresponding sub-lemma is needed.
 
-## What remains
+## Next steps
+
+In order, the three remaining pieces of the backward direction:
 
 1. **`starts_with_absorbAndFinish`** — for a halted cfg `⟨none, tape⟩`,
    force `A` to start with `absorbAndFinish tape.left.toList
    (tape.head :: tape.right.toList)`. Same flavour as the step lemmas:
-   force copies up to the `h⊥` marker, then peel absorption iterations.
+   force copies up to the `h⊥` marker, peel absorption iterations, then
+   close with `finalTile`. Estimated ~150 LoC.
 
 2. **`backward_aux`** — strong induction on `A.length`. Three cases:
-   * `A = []` → contradiction (the matching invariant requires a non-empty
+   * `A = []` → contradiction (matching invariant requires a non-empty
      lookahead).
-   * `cfg = ⟨none, _⟩` → apply `starts_with_absorbAndFinish`; the
-     resulting `A'` is shorter, conclude with `ReflTransGen.refl`.
+   * `cfg = ⟨none, _⟩` → apply `starts_with_absorbAndFinish`; recurse on
+     a shorter `A'` and close with `ReflTransGen.refl`.
    * `cfg = ⟨some q, tape⟩` → dispatch on `tm.tr q tape.head`:
-     - If the result is `qNew = none` (halt-now), produce the single TM
-       step `cfg → ⟨none, …⟩` directly and conclude.
+     - If `qNew = none` (halt-now), produce the single TM step
+       `cfg → ⟨none, …⟩` directly and conclude.
      - Otherwise apply the appropriate `starts_with_stepTiles*` lemma
-       (which requires `qNew = some _`), get a shorter `A'`, recurse,
+       (each requires `qNew = some _`), get a shorter `A'`, recurse,
        chain the TM step.
 
-3. **Final theorem**:
+   Estimated ~100 LoC.
+
+3. **Final theorem `lu_le_mpcp`**:
    ```lean
-   theorem lu_le_mpcp (tm : SingleTapeTM Symbol) (h_nbw : NoBlankWrites tm)
-       (w : List Symbol) :
+   theorem lu_le_mpcp (tm : SingleTapeTM Symbol) (w : List Symbol)
+       (h_nbw : NoBlankWrites tm) (h_nlb : NoLeftBoundary tm w) :
        Halts tm w ↔ MHasSolution (startTile tm w) (luTiles tm)
    ```
-   Forward direction: `halts_implies_mhasSolution` (done). Backward
-   direction: unpack `MHasSolution`, cancel the leading `[#]` from the
-   matching equation, call `backward_aux` with `cfg = initCfg tm w`.
+   Forward direction: `halts_implies_mhasSolution` (done).
+   Backward direction: unpack `MHasSolution`, cancel the leading `[#]`
+   from the matching equation, call `backward_aux` with
+   `cfg = initCfg tm w`. Estimated ~30 LoC.
 
-See `ROADMAP.md` for the full plan including auxiliary lemmas and the
-estimated line counts for the remaining pieces.
+See `ROADMAP.md` for a more detailed plan including dependencies between
+the remaining lemmas.
