@@ -7,6 +7,9 @@ defaultTargets = ["pcp"]
 [[lean_lib]]
 name = "PCP"
 
+[[lean_lib]]
+name = "CFG"
+
 
 [[require]]
 name = "cslib"
