@@ -9,6 +9,7 @@ module
 public import Halt.Diagonal
 public import Halt.Basic
 public import Halt.TMCode
+public import Halt.Encoding
 
 @[expose] public section
 

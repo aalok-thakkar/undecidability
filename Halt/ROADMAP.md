@@ -122,8 +122,20 @@ work concentrates.
 * `Halt.Diagonal` — ✅ done (model-independent).
 * `Halt.Basic` — ✅ done (decision predicate, vacuous without
   computability constraint).
-* Phase 1 (`Halt.TMCode`) — 🚧 in progress.
-* Phases 2–4 — 🚧 not yet started.
+* **Phase 1** (`Halt.TMCode`) — ✅ done.
+* **Phase 2** (`Halt.Encoding`) — ✅ mostly done. `encodeTMCode` and
+  `decodeTMCode` are both in, with round-trip lemmas for every primitive
+  encoder (`encodeNat`, `encodeFin`, `encodeBool`, `encodeOptBool`,
+  `encodeOptDir`, `encodeStmt`, `encodeOptFin`, `encodeTrEntry`,
+  `encodeTrEntries`, `encodeTrTable` — the last decoded as a flat list).
+  The full `decode (encode c) = some c` for `TMCode` is the next
+  follow-up: it requires the pointwise lookup lemma
+  `(trToList tr)[3 * q.val + symbolIdx ob] = tr q ob`, which is also
+  deferred. These pieces are needed for Phase 4 (injectivity of the
+  encoding) but not for Phase 3 (the universal TM can treat
+  `encodeTMCode` as a black box).
+* **Phase 3** — 🚧 not yet started.
+* **Phase 4** — 🚧 not yet started.
 
 ## Build invariant
 
