@@ -186,11 +186,58 @@ theorem lu_le_mpcp_canonical (tm : SingleTapeTM Symbol) (w : List Symbol)
 ```
 
 The forward direction is `halts_implies_mhasSolution` (already proved).
-The backward direction needs a **membership-purification step**:
-showing that for any `A` drawn from `startTile :: luTiles tm`
-satisfying the MHasSolution matching, every tile of `A` is in fact in
-`luTiles tm` alone. Once that is established, `backward_aux` applies
-directly.
+The backward direction needs to handle `A` drawn from
+`startTile :: luTiles tm`. The current development scaffolds the
+weak-hypothesis machinery in two layers:
+
+### ✅ Done
+
+Four **weak-hypothesis forcing lemmas** (admit `A ⊆ startTile :: luTiles tm`):
+
+* `copy_prefix_forced_weak` — rules out the start tile by the leading
+  `↟ₜ_` of `liftTape tm L`.
+* `transition_forced_weak` — rules out the start tile by the leading
+  `↟ₛq`.
+* `copy_prefix_forced_state_lead_weak` — same character-mismatch ruling.
+* `sep_forced_weak` — at the sep position the start tile is *not* ruled
+  out by the leading character; the conclusion is a disjunction
+  (sepTile vs startTile branch).
+
+Four **weak step lemmas** (`starts_with_stepTiles*_weak`) — one per
+direction case (no-move, right-interior, right-boundary, left-interior).
+Three of them propagate `sep_forced_weak`'s disjunction; the
+right-boundary case has no sep tile and concludes single-form (ruling
+out the alternative `rightMoveTile` path via `no_tile_for_state_sharp_weak`).
+
+### 🚧 Still to do
+
+The remaining pieces:
+
+1. **Extras-aware step lemmas** (`starts_with_stepTiles*_weak_ext`).
+   Generalise the four weak step lemmas to take an extras parameter
+   `rest_cfgs : List tm.Cfg`. Input invariant
+   `tau1 A = encodeRunningCfg q t ++ [#] ++ queueEncoding rest_cfgs ++ tau2 A`;
+   conclusion uses `queueEncoding (rest_cfgs ++ [stepResult, …])`. The
+   proofs are mechanical variants of the no-extras versions: replace
+   each occurrence of `tau2 A` in the trace with
+   `queueEncoding rest_cfgs ++ tau2 A`. Estimated ~400 LoC.
+
+2. **`backward_aux_weak` with chain tracking**. Strong induction
+   maintaining a queue of `(cfg, initCfg →* cfg)` pairs. At each
+   iteration, pop the head, apply the appropriate extras-aware step
+   lemma, push the new cfg(s) to the queue (one for `sepTile`, two —
+   the next cfg and `initCfg` — for `startTile`). When the popped
+   cfg's state is `none`, return its chain. Estimated ~250 LoC.
+
+3. **`mhasSolution_implies_halts`** (canonical). Extract `A` from
+   `MHasSolution`, cancel the leading `#`, call `backward_aux_weak`
+   with the initial queue `[initCfg]` and `refl` as `initCfg`'s chain.
+   Estimated ~40 LoC.
+
+4. **Replace `lu_le_mpcp`** to use the canonical `MHasSolution`
+   formulation. Estimated ~30 LoC.
+
+Total remaining: ~700–800 LoC.
 
 ### Why purification is non-trivial
 
