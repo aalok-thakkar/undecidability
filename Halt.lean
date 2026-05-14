@@ -10,6 +10,8 @@ public import Halt.Diagonal
 public import Halt.Basic
 public import Halt.TMCode
 public import Halt.Encoding
+public import Halt.Pair
+public import Halt.Helpers
 
 @[expose] public section
 
@@ -25,7 +27,14 @@ This module re-exports the public Halt-undecidability API:
   cslib's `Turing.SingleTapeTM` is decidable" (the predicate
   `HaltDecidable`), together with the goal theorem
   `halt_undecidable : ¬ HaltDecidable …` (proof: see `ROADMAP.md`).
-* `Halt.TMCode`    — normalised TM representation (Phase 1 of Path C):
+* `Halt.TMCode`    — normalised TM representation (Phase 1):
   `Bool` alphabet, `Fin (n+1)` states, with an interpretation map
   `tmCodeToTM : TMCode → SingleTapeTM Bool`.
+* `Halt.Encoding`  — Gödel numbering (Phase 2): self-delimiting bit
+  encoding of `TMCode` as `List Bool`.
+* `Halt.Pair`      — pair encoding (Phase 3a): length-prefixed
+  serialisation of `(c, w)` as a single `List Bool`.
+* `Halt.Helpers`   — concrete helper TMs for the diagonal: `invertTM`
+  (loops on `[true]`, halts on `[false]`) and (TODO) `dupTM` (copies
+  its input). Phases 3c–3d.
 -/

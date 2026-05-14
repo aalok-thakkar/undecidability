@@ -315,10 +315,12 @@ lemma trToList_length {n : ℕ}
 
     `(trToList tr)[3 * q.val + symbolIdx ob] = tr q ob`
 
-is a clean restatement of the encoding's canonical-order property. We
-defer its proof to a follow-up commit, since the immediate goal of
-Phase 2 is the round-trip lemma below, which only needs the list and
-its length. -/
+restates the encoding's canonical-order property: the flat list places
+the three entries for state `q` consecutively at positions
+`3 * q.val`, `3 * q.val + 1`, `3 * q.val + 2`, in `symbolIdx` order.
+The proof is deferred — it's needed for Phase 4 (injectivity of
+`decodeTMCode`), not for Phase 3, which can treat `encodeTMCode` as a
+black box. -/
 
 /-- Encode a flat list of transition entries. -/
 def encodeTrEntries {n : ℕ}

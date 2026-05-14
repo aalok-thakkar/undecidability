@@ -7,6 +7,9 @@ module
 
 public import PCP.Halt
 public import Halt.Diagonal
+public import Halt.TMCode
+public import Halt.Encoding
+public import Halt.Pair
 
 @[expose] public section
 
@@ -18,37 +21,33 @@ This file states the decision problem **HALT** for cslib's
 
   Given a TM `tm` and an input `w`, does `tm` halt on `w`?
 
-formalised by the predicate `Halts` (see `PCP.Halt`). We define
-`HaltDecidable` — the proposition that a Bool-valued *decider* for
-`Halts` exists — and lay out the goal theorem `halt_undecidable`.
+formalised by the predicate `Halts` (see `PCP.Halt`).
 
-## Important caveat on the formalisation
+We use two decision-predicate forms.
 
-In dependent type theory, *every* predicate admits a Bool-valued
-decider classically (take `fun x => decide (Halts tm w)` via classical
-choice). So `HaltDecidable` as written below is *vacuously true*. To
-make the claim non-trivial, the decider has to be required to be
-*computable* in some externally-fixed sense (e.g. expressible as a
-Turing machine, partial recursive function, or URM program).
+## `HaltDecidable` (loose form)
 
-We isolate two parts:
-* The shape of the decider — `HaltDecidable` below — which is just
-  "some Bool-valued function decides `Halts`".
-* The model-specific "computable" hypothesis — formalised separately
-  (see `Halt.ROADMAP.md`) once the bridge to Mathlib's `Nat.Partrec`
-  framework, or a direct universal `SingleTapeTM`, is built.
+```
+∃ decide : SingleTapeTM Symbol → List Symbol → Bool, …
+```
 
-The kernel of the diagonal argument (`Halt.Diagonal`) is already in
-place and is independent of these choices.
+is **vacuously true classically** (any `Halts tm w : Prop` admits a
+`Classical.dec`-style Bool decider). Useful only for stating what we
+*want* to refute — the real content comes from the second form below.
 
-## Status
+## `IsHaltDecider` (strict form)
 
-This file currently provides only `HaltDecidable Symbol` — the
-(non-computability-constrained) decision predicate.
+```
+∀ (c : TMCode) (w : List Bool),
+    Outputs D (encodePair (encodeTMCode c) w)
+      (if Halts c.toTM w then [true] else [false])
+```
 
-The main theorem `halt_undecidable` (when stated with a computability
-constraint) is *not yet proved* — it is the subject of the rest of the
-`Halt/` library; see `Halt/ROADMAP.md` for the dependency tree.
+The decider `D : SingleTapeTM Bool` is itself a TM, and "decides" by
+writing `[true]`/`[false]` on its output tape. **Refuting**
+`∃ D, IsHaltDecider D` is the genuine Halting-Problem-undecidability
+result for cslib's `SingleTapeTM`. The proof is the goal of the rest
+of `Halt/`; see `Halt/ROADMAP.md` for the plan.
 -/
 
 namespace Halt
@@ -57,17 +56,30 @@ open PCP Turing
 
 variable {Symbol : Type} [Inhabited Symbol] [Fintype Symbol]
 
-/-! ## The decision predicate -/
+/-! ## Loose form: any Bool-valued decider -/
 
 /-- **`HaltDecidable Symbol`** holds iff some Bool-valued function on
 `SingleTapeTM Symbol × List Symbol` decides `Halts`.
 
-This predicate, taken in isolation, is provable classically (apply
-`Classical.dec` to `Halts tm w`). Its real content is what comes when
-we *additionally* require the decider to be expressible in a fixed
-computational model — see `Halt.ROADMAP.md`. -/
+This predicate, taken in isolation, is provable classically. Its real
+content arrives only when paired with a computability constraint on
+the decider — see `IsHaltDecider` below. -/
 def HaltDecidable (Symbol : Type) [Inhabited Symbol] [Fintype Symbol] : Prop :=
   ∃ decide : SingleTapeTM Symbol → List Symbol → Bool,
     ∀ tm w, decide tm w = true ↔ Halts tm w
+
+/-! ## Strict form: a TM that decides halting -/
+
+/-- **`IsHaltDecider D`** holds iff the single-tape TM `D` over `Bool`,
+when run on the encoded pair `(c, w)`, halts with output `[true]` if
+the encoded TM `c` halts on `w`, and `[false]` otherwise. -/
+def IsHaltDecider (D : SingleTapeTM Bool) : Prop :=
+  ∀ (c : Halt.TMCode) (w : List Bool),
+    (Halts c.toTM w →
+      SingleTapeTM.Outputs D
+        (Halt.Pair.encodePair (Halt.Encoding.encodeTMCode c) w) [true]) ∧
+    (¬ Halts c.toTM w →
+      SingleTapeTM.Outputs D
+        (Halt.Pair.encodePair (Halt.Encoding.encodeTMCode c) w) [false])
 
 end Halt
