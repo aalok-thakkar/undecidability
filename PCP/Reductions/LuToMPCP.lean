@@ -3536,6 +3536,384 @@ private lemma starts_with_stepTilesLeftInterior_weak (tm : SingleTapeTM Symbol)
       · simp only [finalTile_top, List.cons_append, List.nil_append] at hA_tau1
         injection hA_tau1 with h _; cases h
 
+/-! ## Queue-based extras encoding for the canonical iff
+
+`queueEncoding tm cfgs` concatenates `encodeCfg tm c ++ [#]` for each
+`c ∈ cfgs`. The canonical `backward_aux_weak` maintains the matching
+invariant
+  `tau1 A = encodeCfg tm cfg ++ [#] ++ queueEncoding tm rest_cfgs ++ tau2 A`
+where `(cfg, rest_cfgs)` is the head + tail of a queue tracking
+simulations still to be processed. The current cfg's chain
+`initCfg →* cfg` is threaded separately. -/
+
+private def queueEncoding (tm : SingleTapeTM Symbol) :
+    List tm.Cfg → List (Alpha tm.State Symbol)
+  | []        => []
+  | c :: rest => encodeCfg tm c ++ [#] ++ queueEncoding tm rest
+
+@[simp] private lemma queueEncoding_nil (tm : SingleTapeTM Symbol) :
+    queueEncoding tm [] = [] := rfl
+
+@[simp] private lemma queueEncoding_cons (tm : SingleTapeTM Symbol)
+    (c : tm.Cfg) (rest : List tm.Cfg) :
+    queueEncoding tm (c :: rest) =
+      encodeCfg tm c ++ [#] ++ queueEncoding tm rest := rfl
+
+private lemma queueEncoding_append_single (tm : SingleTapeTM Symbol)
+    (cfgs : List tm.Cfg) (c : tm.Cfg) :
+    queueEncoding tm (cfgs ++ [c]) =
+      queueEncoding tm cfgs ++ encodeCfg tm c ++ [#] := by
+  induction cfgs with
+  | nil => simp [queueEncoding]
+  | cons _ _ ih => simp [queueEncoding, ih, List.append_assoc]
+
+private lemma queueEncoding_append_pair (tm : SingleTapeTM Symbol)
+    (cfgs : List tm.Cfg) (c1 c2 : tm.Cfg) :
+    queueEncoding tm (cfgs ++ [c1, c2]) =
+      queueEncoding tm cfgs ++ encodeCfg tm c1 ++ [#] ++
+        encodeCfg tm c2 ++ [#] := by
+  induction cfgs with
+  | nil => simp [queueEncoding]
+  | cons _ _ ih => simp [queueEncoding, ih, List.append_assoc]
+
+/-! ## Step 4 (extras-aware): step lemmas threading a queue of pending cfgs
+
+Each lemma is the queue-aware counterpart of its `_weak` predecessor.
+The matching invariant carries an explicit `rest_cfgs` queue of cfgs
+whose encodings sit between `[#]` (after the current cfg) and `tau2 A`.
+After peeling one canonical step block (for the current cfg), the
+residual's invariant has the queue augmented by `[stepResult]`
+(sepTile case) or `[stepResult, initCfg]` (startTile case). -/
+
+private lemma starts_with_stepTilesNoMove_weak_ext (tm : SingleTapeTM Symbol)
+    (w_in : List Symbol)
+    (q : tm.State) (t : BiTape Symbol)
+    (qNew : Option tm.State) (w : Option Symbol)
+    (htr : tm.tr q t.head = (⟨w, none⟩, qNew))
+    (rest_cfgs : List tm.Cfg)
+    (A : Stack (Alpha tm.State Symbol))
+    (h_mem : ∀ s ∈ A, s ∈ startTile tm w_in :: luTiles tm)
+    (h_eq : tau1 A = encodeRunningCfg tm q t ++ [#] ++
+              queueEncoding tm rest_cfgs ++ tau2 A) :
+    ∃ A' : Stack (Alpha tm.State Symbol),
+        A'.length < A.length ∧
+        (∀ s ∈ A', s ∈ startTile tm w_in :: luTiles tm) ∧
+        ((tau1 A' = queueEncoding tm
+            (rest_cfgs ++ [⟨qNew, t.write w⟩]) ++ tau2 A') ∨
+         (tau1 A' = queueEncoding tm
+            (rest_cfgs ++ [⟨qNew, t.write w⟩,
+              SingleTapeTM.initCfg tm w_in]) ++ tau2 A')) := by
+  have h_not_left : ∀ (qN : Option tm.State) (w' : Option Symbol),
+      tm.tr q t.head ≠ (⟨w', some Dir.left⟩, qN) := by
+    intro qN w' h
+    rw [htr] at h
+    injection h with h1 _
+    injection h1 with _ h_dir
+    cases h_dir
+  have h_eq' : tau1 A =
+      liftTape tm t.left.toList.reverse ++ ↟ₛq :: ↟ₜt.head ::
+        (liftTape tm t.right.toList ++ [#] ++
+          queueEncoding tm rest_cfgs ++ tau2 A) := by
+    simpa [encodeRunningCfg, liftTape_cons, List.append_assoc] using h_eq
+  obtain ⟨A1, hA, hA_mem, hA_tau1, hA_tau2⟩ :=
+    copy_prefix_forced_state_lead_weak tm w_in q t.head h_not_left
+      t.left.toList.reverse A
+      (liftTape tm t.right.toList ++ [#] ++
+        queueEncoding tm rest_cfgs ++ tau2 A) h_mem h_eq'
+  obtain ⟨tile, A2, hA1_decomp, h_tile_in, hA2_mem⟩ :=
+    transition_forced_weak tm w_in q t.head
+      (liftTape tm t.right.toList ++ [#] ++
+        queueEncoding tm rest_cfgs ++ tau2 A) A1 hA_mem hA_tau1
+  have h_tile_eq : tile = noMoveTile tm q t.head qNew w := by
+    simp only [transitionTilesFor] at h_tile_in
+    rw [htr] at h_tile_in
+    exact List.mem_singleton.mp h_tile_in
+  subst h_tile_eq
+  have hA2_tau1 : tau1 A2 = liftTape tm t.right.toList ++ [#] ++
+      queueEncoding tm rest_cfgs ++ tau2 A := by
+    have key := hA_tau1
+    rw [hA1_decomp, tau1_cons, noMoveTile_top] at key
+    simpa using key
+  obtain ⟨A3, hA2, hA3_mem, hA3_tau1, hA3_tau2⟩ :=
+    copy_prefix_forced_weak tm w_in t.right.toList A2
+      ([#] ++ queueEncoding tm rest_cfgs ++ tau2 A) hA2_mem
+      (by simpa [List.append_assoc] using hA2_tau1)
+      (by intro x h; injection h with h1 _; cases h1)
+      (by intro q' x h; injection h with h1 _; cases h1)
+  obtain ⟨A4, hA3_decomp_disj, hA4_tau1, hA4_mem⟩ :=
+    sep_forced_weak tm w_in (queueEncoding tm rest_cfgs ++ tau2 A) A3
+      hA3_mem (by simpa using hA3_tau1)
+  refine ⟨A4, ?_, hA4_mem, ?_⟩
+  · rcases hA3_decomp_disj with ⟨hA3_decomp, _⟩ | ⟨hA3_decomp, _⟩
+    all_goals
+      rw [hA, hA1_decomp, hA2, hA3_decomp]
+      simp [List.length_append, List.length_map, List.length_reverse]
+      omega
+  · rcases hA3_decomp_disj with ⟨hA3_decomp, _⟩ | ⟨hA3_decomp, _⟩
+    · left
+      rw [hA4_tau1, hA_tau2, hA1_decomp, tau2_cons, noMoveTile_bot, hA3_tau2,
+          hA3_decomp, tau2_cons, sepTile_bot, queueEncoding_append_single]
+      cases qNew with
+      | none =>
+        simp [encodeCfg_halted, encodeHaltedCfg, BiTape.write,
+              stateMarker_none, liftTape_cons, List.append_assoc]
+      | some q' =>
+        simp [encodeCfg_running, encodeRunningCfg, BiTape.write,
+              stateMarker_some, liftTape_cons, List.append_assoc]
+    · right
+      rw [hA4_tau1, hA_tau2, hA1_decomp, tau2_cons, noMoveTile_bot, hA3_tau2,
+          hA3_decomp, tau2_cons, startTile_bot, queueEncoding_append_pair]
+      cases qNew with
+      | none =>
+        simp [encodeCfg_halted, encodeHaltedCfg, BiTape.write,
+              stateMarker_none, liftTape_cons, List.append_assoc]
+      | some q' =>
+        simp [encodeCfg_running, encodeRunningCfg, BiTape.write,
+              stateMarker_some, liftTape_cons, List.append_assoc]
+
+private lemma starts_with_stepTilesRightInterior_weak_ext (tm : SingleTapeTM Symbol)
+    (w_in : List Symbol)
+    (q : tm.State) (t : BiTape Symbol)
+    (qNew : Option tm.State) (w : Option Symbol)
+    (htr : tm.tr q t.head = (⟨w, some Dir.right⟩, qNew))
+    (h_right_ne : t.right.toList ≠ [])
+    (h_nondeg : w ≠ none ∨ t.left.toList ≠ [])
+    (rest_cfgs : List tm.Cfg)
+    (A : Stack (Alpha tm.State Symbol))
+    (h_mem : ∀ s ∈ A, s ∈ startTile tm w_in :: luTiles tm)
+    (h_eq : tau1 A = encodeRunningCfg tm q t ++ [#] ++
+              queueEncoding tm rest_cfgs ++ tau2 A) :
+    ∃ A' : Stack (Alpha tm.State Symbol),
+        A'.length < A.length ∧
+        (∀ s ∈ A', s ∈ startTile tm w_in :: luTiles tm) ∧
+        ((tau1 A' = queueEncoding tm
+            (rest_cfgs ++ [⟨qNew, (t.write w).move_right⟩]) ++ tau2 A') ∨
+         (tau1 A' = queueEncoding tm
+            (rest_cfgs ++ [⟨qNew, (t.write w).move_right⟩,
+              SingleTapeTM.initCfg tm w_in]) ++ tau2 A')) := by
+  have h_not_left : ∀ (qN : Option tm.State) (w' : Option Symbol),
+      tm.tr q t.head ≠ (⟨w', some Dir.left⟩, qN) := by
+    intro qN w' h
+    rw [htr] at h
+    injection h with h1 _
+    injection h1 with _ h_dir
+    injection h_dir with h_dir2
+    cases h_dir2
+  have h_eq' : tau1 A = liftTape tm t.left.toList.reverse ++ ↟ₛq :: ↟ₜt.head ::
+      (liftTape tm t.right.toList ++ [#] ++
+        queueEncoding tm rest_cfgs ++ tau2 A) := by
+    simpa [encodeRunningCfg, liftTape_cons, List.append_assoc] using h_eq
+  obtain ⟨A1, hA, hA_mem, hA_tau1, hA_tau2⟩ :=
+    copy_prefix_forced_state_lead_weak tm w_in q t.head h_not_left
+      t.left.toList.reverse A
+      (liftTape tm t.right.toList ++ [#] ++
+        queueEncoding tm rest_cfgs ++ tau2 A) h_mem h_eq'
+  obtain ⟨tile, A2, hA1_decomp, h_tile_in, hA2_mem⟩ :=
+    transition_forced_weak tm w_in q t.head
+      (liftTape tm t.right.toList ++ [#] ++
+        queueEncoding tm rest_cfgs ++ tau2 A) A1 hA_mem hA_tau1
+  simp only [transitionTilesFor] at h_tile_in
+  rw [htr] at h_tile_in
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at h_tile_in
+  rcases h_tile_in with rfl | rfl
+  · -- rightMoveTile (intended).
+    have hA2_tau1 : tau1 A2 = liftTape tm t.right.toList ++ [#] ++
+        queueEncoding tm rest_cfgs ++ tau2 A := by
+      have key := hA_tau1
+      rw [hA1_decomp, tau1_cons, rightMoveTile_top] at key
+      simpa using key
+    obtain ⟨A3, hA2, hA3_mem, hA3_tau1, hA3_tau2⟩ :=
+      copy_prefix_forced_weak tm w_in t.right.toList A2
+        ([#] ++ queueEncoding tm rest_cfgs ++ tau2 A) hA2_mem
+        (by simpa [List.append_assoc] using hA2_tau1)
+        (by intro x h; injection h with h1 _; cases h1)
+        (by intro q' x h; injection h with h1 _; cases h1)
+    obtain ⟨A4, hA3_decomp_disj, hA4_tau1, hA4_mem⟩ :=
+      sep_forced_weak tm w_in (queueEncoding tm rest_cfgs ++ tau2 A) A3
+        hA3_mem (by simpa using hA3_tau1)
+    refine ⟨A4, ?_, hA4_mem, ?_⟩
+    · rcases hA3_decomp_disj with ⟨hA3_decomp, _⟩ | ⟨hA3_decomp, _⟩
+      all_goals
+        rw [hA, hA1_decomp, hA2, hA3_decomp]
+        simp [List.length_append, List.length_map, List.length_reverse]
+        omega
+    · rcases hA3_decomp_disj with ⟨hA3_decomp, _⟩ | ⟨hA3_decomp, _⟩
+      · left
+        rw [hA4_tau1, hA_tau2, hA1_decomp, tau2_cons, rightMoveTile_bot,
+            hA3_tau2, hA3_decomp, tau2_cons, sepTile_bot,
+            queueEncoding_append_single,
+            encodeCfg_after_right_move_eq tm qNew t w h_nondeg h_right_ne]
+        simp [List.append_assoc]
+      · right
+        rw [hA4_tau1, hA_tau2, hA1_decomp, tau2_cons, rightMoveTile_bot,
+            hA3_tau2, hA3_decomp, tau2_cons, startTile_bot,
+            queueEncoding_append_pair,
+            encodeCfg_after_right_move_eq tm qNew t w h_nondeg h_right_ne]
+        simp [List.append_assoc]
+  · -- rightMoveBoundaryTile (ruled out: t.right ≠ []).
+    exfalso
+    have key := hA_tau1
+    rw [hA1_decomp, tau1_cons, rightMoveBoundaryTile_top] at key
+    cases h_rt : t.right.toList with
+    | nil => exact h_right_ne h_rt
+    | cons c cs =>
+      rw [h_rt] at key
+      simp only [liftTape_cons, List.cons_append, List.nil_append] at key
+      injection key with _ key
+      injection key with _ key
+      injection key with h_third _
+      cases h_third
+
+-- NOTE: `starts_with_stepTilesRightBoundary_weak_ext` is intentionally
+-- not provided. Its statement would require the same conclusion as
+-- the strong version, but the alternative `rightMoveTile` path's
+-- residual under non-empty `rest_cfgs` (i.e., after a startTile
+-- insertion earlier) has `queueEncoding rest_cfgs` at the head of
+-- `tau1 A3`, blocking the direct `no_tile_for_state_sharp_weak`
+-- contradiction. Resolving this needs a queue-walking lemma — see
+-- ROADMAP.md.
+
+private lemma starts_with_stepTilesLeftInterior_weak_ext (tm : SingleTapeTM Symbol)
+    (w_in : List Symbol)
+    (q : tm.State) (t : BiTape Symbol)
+    (qNew : Option tm.State) (w : Option Symbol)
+    (htr : tm.tr q t.head = (⟨w, some Dir.left⟩, qNew))
+    (h_left_ne : t.left.toList ≠ [])
+    (h_nondeg : w ≠ none ∨ t.right.toList ≠ [])
+    (rest_cfgs : List tm.Cfg)
+    (A : Stack (Alpha tm.State Symbol))
+    (h_mem : ∀ s ∈ A, s ∈ startTile tm w_in :: luTiles tm)
+    (h_eq : tau1 A = encodeRunningCfg tm q t ++ [#] ++
+              queueEncoding tm rest_cfgs ++ tau2 A) :
+    ∃ A' : Stack (Alpha tm.State Symbol),
+        A'.length < A.length ∧
+        (∀ s ∈ A', s ∈ startTile tm w_in :: luTiles tm) ∧
+        ((tau1 A' = queueEncoding tm
+            (rest_cfgs ++ [⟨qNew, (t.write w).move_left⟩]) ++ tau2 A') ∨
+         (tau1 A' = queueEncoding tm
+            (rest_cfgs ++ [⟨qNew, (t.write w).move_left⟩,
+              SingleTapeTM.initCfg tm w_in]) ++ tau2 A')) := by
+  have h_split : t.left.toList.reverse =
+      t.left.tail.toList.reverse ++ [t.left.head] := by
+    conv_lhs => rw [← head_cons_tail_toList t.left h_left_ne]
+    simp [List.reverse_cons]
+  have h_eq' : tau1 A = liftTape tm t.left.tail.toList.reverse ++
+      ↟ₜt.left.head :: ↟ₛq :: ↟ₜt.head ::
+      (liftTape tm t.right.toList ++ [#] ++
+        queueEncoding tm rest_cfgs ++ tau2 A) := by
+    rw [h_eq, encodeRunningCfg, h_split,
+        liftTape_append, liftTape_cons, liftTape_nil, liftTape_cons]
+    simp [List.append_assoc]
+  obtain ⟨A1, hA, hA_mem, hA_tau1, hA_tau2⟩ :=
+    copy_prefix_forced_weak tm w_in t.left.tail.toList.reverse A
+      (↟ₜt.left.head :: ↟ₛq :: ↟ₜt.head ::
+        (liftTape tm t.right.toList ++ [#] ++
+          queueEncoding tm rest_cfgs ++ tau2 A))
+      h_mem h_eq'
+      (by intro x h; injection h with h1 _; cases h1)
+      (by intro q' x h; injection h with h1 _; cases h1)
+  cases A1 with
+  | nil => simp at hA_tau1
+  | cons t1 A1_rest =>
+    have h_t1_in : t1 ∈ startTile tm w_in :: luTiles tm :=
+      hA_mem t1 (List.mem_cons_self ..)
+    have h_a1_rest_in : ∀ s ∈ A1_rest, s ∈ startTile tm w_in :: luTiles tm :=
+      fun s hs => hA_mem s (List.mem_cons_of_mem t1 hs)
+    rw [tau1_cons] at hA_tau1
+    rcases List.mem_cons.mp h_t1_in with rfl | h_t1_lu
+    · simp only [startTile_top, List.cons_append, List.nil_append] at hA_tau1
+      injection hA_tau1 with h _; cases h
+    · rcases mem_luTiles_top tm t1 h_t1_lu with
+          ⟨_, rfl⟩
+        | rfl
+        | ⟨_, _, _, _, _, rfl⟩
+        | ⟨_, _, _, _, _, rfl | rfl⟩
+        | ⟨q', a', qNew', w', h_tr', b', rfl⟩
+        | ⟨_, rfl⟩
+        | ⟨_, rfl⟩
+        | rfl
+      · simp only [copyTile_top, List.cons_append, List.nil_append] at hA_tau1
+        injection hA_tau1 with h_head h_tail
+        injection h_head with h_a; subst h_a
+        obtain ⟨tile', _, hA1_rest_decomp, h_tile_in, _⟩ :=
+          transition_forced_weak tm w_in q t.head
+            (liftTape tm t.right.toList ++ [#] ++
+              queueEncoding tm rest_cfgs ++ tau2 A) A1_rest
+            h_a1_rest_in (by simpa using h_tail)
+        simp only [transitionTilesFor] at h_tile_in
+        rw [htr] at h_tile_in
+        simp only [List.mem_map] at h_tile_in
+        obtain ⟨_, _, rfl⟩ := h_tile_in
+        have key := h_tail
+        rw [hA1_rest_decomp, tau1_cons, leftMoveTile_top] at key
+        simp only [List.cons_append, List.nil_append] at key
+        injection key with h_h _
+        cases h_h
+      · simp only [sepTile_top, List.cons_append, List.nil_append] at hA_tau1
+        injection hA_tau1 with h _; cases h
+      · simp only [noMoveTile_top, List.cons_append, List.nil_append] at hA_tau1
+        injection hA_tau1 with h _; cases h
+      · simp only [rightMoveTile_top, List.cons_append, List.nil_append] at hA_tau1
+        injection hA_tau1 with h _; cases h
+      · simp only [rightMoveBoundaryTile_top, List.cons_append,
+                   List.nil_append] at hA_tau1
+        injection hA_tau1 with h _; cases h
+      · -- Canonical: leftMoveTile.
+        simp only [leftMoveTile_top, List.cons_append, List.nil_append] at hA_tau1
+        injection hA_tau1 with h_b h_rest1
+        injection h_b with h_b'
+        subst h_b'
+        injection h_rest1 with h_q h_rest2
+        injection h_q with h_q'
+        subst h_q'
+        injection h_rest2 with h_a h_rest3
+        injection h_a with h_a'
+        subst h_a'
+        have h_tr_eq := h_tr'.symm.trans htr
+        injection h_tr_eq with h_w_eq h_qNew_eq
+        injection h_w_eq with h_w'
+        subst w'
+        subst qNew'
+        obtain ⟨A2, hA1_rest_decomp, hA2_mem, hA2_tau1, hA2_tau2⟩ :=
+          copy_prefix_forced_weak tm w_in t.right.toList A1_rest
+            ([#] ++ queueEncoding tm rest_cfgs ++ tau2 A) h_a1_rest_in
+            (by simpa [List.append_assoc] using h_rest3)
+            (by intro x h; injection h with h1 _; cases h1)
+            (by intro q' x h; injection h with h1 _; cases h1)
+        obtain ⟨A3, hA2_decomp_disj, hA3_tau1, hA3_mem⟩ :=
+          sep_forced_weak tm w_in (queueEncoding tm rest_cfgs ++ tau2 A) A2
+            hA2_mem (by simpa using hA2_tau1)
+        refine ⟨A3, ?_, hA3_mem, ?_⟩
+        · rcases hA2_decomp_disj with ⟨hA2_decomp, _⟩ | ⟨hA2_decomp, _⟩
+          all_goals
+            rw [hA, hA1_rest_decomp, hA2_decomp]
+            simp [List.length_append, List.length_map, List.length_reverse,
+                  List.length_cons]
+            omega
+        · rcases hA2_decomp_disj with ⟨hA2_decomp, _⟩ | ⟨hA2_decomp, _⟩
+          · left
+            rw [hA3_tau1, hA_tau2, tau2_cons, leftMoveTile_bot,
+                hA2_tau2, hA2_decomp, tau2_cons, sepTile_bot,
+                queueEncoding_append_single,
+                encodeCfg_after_left_move_eq tm qNew t w h_nondeg]
+            simp [List.append_assoc]
+          · right
+            rw [hA3_tau1, hA_tau2, tau2_cons, leftMoveTile_bot,
+                hA2_tau2, hA2_decomp, tau2_cons, startTile_bot,
+                queueEncoding_append_pair,
+                encodeCfg_after_left_move_eq tm qNew t w h_nondeg]
+            simp [List.append_assoc]
+      · simp only [absorbLeftTile_top, List.cons_append,
+                   List.nil_append] at hA_tau1
+        injection hA_tau1 with _ h
+        injection h with h2 _
+        cases h2
+      · simp only [absorbRightTile_top, List.cons_append,
+                   List.nil_append] at hA_tau1
+        injection hA_tau1 with h _; cases h
+      · simp only [finalTile_top, List.cons_append, List.nil_append] at hA_tau1
+        injection hA_tau1 with h _; cases h
+
 /-! ## Step 6: `backward_aux` — main strong induction
 
 The main strong-induction lemma for the backward direction. Given a stack

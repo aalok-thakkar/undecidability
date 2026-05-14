@@ -211,23 +211,38 @@ out the alternative `rightMoveTile` path via `no_tile_for_state_sharp_weak`).
 
 ### 🚧 Still to do
 
-The remaining pieces:
+The `queueEncoding` helper and three of the four extras-aware step
+lemmas (`starts_with_stepTilesNoMove_weak_ext`,
+`starts_with_stepTilesRightInterior_weak_ext`,
+`starts_with_stepTilesLeftInterior_weak_ext`) are now in place. The
+remaining pieces:
 
-1. **Extras-aware step lemmas** (`starts_with_stepTiles*_weak_ext`).
-   Generalise the four weak step lemmas to take an extras parameter
-   `rest_cfgs : List tm.Cfg`. Input invariant
-   `tau1 A = encodeRunningCfg q t ++ [#] ++ queueEncoding rest_cfgs ++ tau2 A`;
-   conclusion uses `queueEncoding (rest_cfgs ++ [stepResult, …])`. The
-   proofs are mechanical variants of the no-extras versions: replace
-   each occurrence of `tau2 A` in the trace with
-   `queueEncoding rest_cfgs ++ tau2 A`. Estimated ~400 LoC.
+1. **`starts_with_stepTilesRightBoundary_weak_ext`** — currently
+   *omitted*. The strong-hypothesis version's contradiction (in the
+   `rightMoveTile` alternative path) relies on
+   `no_tile_for_state_sharp` exposing `↟ₛqNew_q :: # :: …` directly
+   after stripping `liftTape t.left.toList.reverse`. Under non-empty
+   `rest_cfgs`, that `↟ₛqNew_q :: # :: …` is preceded by
+   `queueEncoding rest_cfgs`, so the contradiction requires *walking
+   through the queued simulations* before exposing the contradicting
+   prefix. Two viable approaches:
+
+   * A "**queue-walking** `no_tile_for_state_sharp_through_queue`"
+     lemma proving the contradiction by structural recursion on
+     `rest_cfgs`. Estimated ~150–250 LoC.
+   * Or restate the right-boundary lemma to a 3-way disjunction
+     (canonical, alt+sepTile, alt+startTile) and let `backward_aux_weak`
+     dispatch on the branch. The alternative branches produce
+     residuals with non-canonical structure that `backward_aux_weak`
+     would have to absorb separately.
 
 2. **`backward_aux_weak` with chain tracking**. Strong induction
    maintaining a queue of `(cfg, initCfg →* cfg)` pairs. At each
    iteration, pop the head, apply the appropriate extras-aware step
    lemma, push the new cfg(s) to the queue (one for `sepTile`, two —
    the next cfg and `initCfg` — for `startTile`). When the popped
-   cfg's state is `none`, return its chain. Estimated ~250 LoC.
+   cfg's state is `none`, return its chain. The right-boundary case
+   needs the lemma from (1). Estimated ~250 LoC.
 
 3. **`mhasSolution_implies_halts`** (canonical). Extract `A` from
    `MHasSolution`, cancel the leading `#`, call `backward_aux_weak`
@@ -237,7 +252,7 @@ The remaining pieces:
 4. **Replace `lu_le_mpcp`** to use the canonical `MHasSolution`
    formulation. Estimated ~30 LoC.
 
-Total remaining: ~700–800 LoC.
+Total remaining: ~470–570 LoC.
 
 ### Why purification is non-trivial
 
