@@ -11,24 +11,31 @@ public import Cslib.Computability.Machines.SingleTapeTuring.Basic
 @[expose] public section
 
 /-!
-# The Universal Language `Lu` (Halting Problem)
+# The Halting Problem `Halt`
 
-`Lu` is the language
+`Halt` is the language
 
   `{ ⟨M, w⟩ | M is a Turing machine that halts on input w }`.
 
+(Note on naming: this is `HALT_TM` in Sipser's notation, not the
+Universal Language `A_TM = L_u`, which asks for *acceptance*. For
+cslib's `Turing.SingleTapeTM` the two coincide because there is a
+single halt state with no accept/reject distinction, but the predicate
+we formalise — and its standard textbook name — is **halting**, not
+acceptance.)
+
 This file defines the halting predicate `Halts` for CSLib's
 `Turing.SingleTapeTM` and proves the basic equivalences used by the
-reduction in `PCP.Reductions.LuToMPCP`.
+reduction in `PCP.Reductions.HaltToMPCP`.
 
 ## Note on undecidability
 
 The undecidability of `Halts` is the classical *Halting Problem*. It is
 **not** proved in this file, and is not present in cslib for
-`Turing.SingleTapeTM`. The reductions `Lu ≤_m MPCP ≤_m PCP` developed in
+`Turing.SingleTapeTM`. The reductions `Halt ≤_m MPCP ≤_m PCP` developed in
 this repository stand on their own — they show
 
-  `Halts tm w ↔ HasSolution (mpcpToPcp (startTile tm w) (luTiles tm))`
+  `Halts tm w ↔ HasSolution (mpcpToPcp (startTile tm w) (haltTiles tm))`
 
 (modulo the HUM side conditions `NoBlankWrites` and `NoLeftBoundary`).
 Closing this into a proof that PCP is undecidable additionally requires

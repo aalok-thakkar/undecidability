@@ -6,18 +6,18 @@ Authors: Aalok Thakkar
 module
 
 public import PCP.Reduction
-public import PCP.Reductions.LuToMPCP
+public import PCP.Reductions.HaltToMPCP
 
 @[expose] public section
 
 /-!
-# `Lu ≤_m PCP` — composing the two reductions
+# `Halt ≤_m PCP` — composing the two reductions
 
-This file composes the `Lu ≤_m MPCP` iff (file `PCP.Reductions.LuToMPCP`)
+This file composes the `Halt ≤_m MPCP` iff (file `PCP.Reductions.HaltToMPCP`)
 with the `MPCP ≤_m PCP` iff (file `PCP.Reduction`) to obtain a direct
 equivalence between the halting predicate `Halts tm w` and PCP
 solvability of the reduced instance
-`mpcpToPcp (startTile tm w) (luTiles tm)`.
+`mpcpToPcp (startTile tm w) (haltTiles tm)`.
 
 The forward direction packages the function side of the many-one
 reduction: given a TM `tm` (subject to the HUM side conditions
@@ -25,7 +25,7 @@ reduction: given a TM `tm` (subject to the HUM side conditions
 PCP instance whose solvability is equivalent to `Halts tm w` is
 
 ```
-mpcpToPcp (startTile tm w) (luTiles tm)
+mpcpToPcp (startTile tm w) (haltTiles tm)
 ```
 
 both finite and computably constructed from `tm` and `w`.
@@ -39,12 +39,12 @@ to remove the `NoBlankWrites` / `NoLeftBoundary` side conditions.
 
 namespace PCP
 
-open Turing PCP.LuToMPCP
+open Turing PCP.HaltToMPCP
 
 variable {Symbol : Type} [Inhabited Symbol] [Fintype Symbol]
 
-/-- **`Lu ≤_m PCP`**: a TM `tm` halts on input `w` iff the explicit
-PCP instance `mpcpToPcp (startTile tm w) (luTiles tm)` has a solution.
+/-- **`Halt ≤_m PCP`**: a TM `tm` halts on input `w` iff the explicit
+PCP instance `mpcpToPcp (startTile tm w) (haltTiles tm)` has a solution.
 
 Both directions rely on the HUM side conditions:
 * `NoBlankWrites tm` — `tm.tr` never writes the blank symbol.
@@ -55,7 +55,7 @@ Lifting these is the subject of a future `PCP.Normalize` module. -/
 theorem halts_iff_pcp (tm : SingleTapeTM Symbol) (w : List Symbol)
     (h_nbw : NoBlankWrites tm) (h_nlb : NoLeftBoundary tm w) :
     Halts tm w ↔
-    HasSolution (mpcpToPcp (startTile tm w) (luTiles tm)) :=
-  (lu_le_mpcp tm h_nbw w h_nlb).trans (mpcp_iff_pcp _ _)
+    HasSolution (mpcpToPcp (startTile tm w) (haltTiles tm)) :=
+  (halt_le_mpcp tm h_nbw w h_nlb).trans (mpcp_iff_pcp _ _)
 
 end PCP

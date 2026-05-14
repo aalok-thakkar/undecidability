@@ -15,7 +15,7 @@ public import PCP.Basic
 
 MPCP is PCP with a designated *start tile*: every solution must begin with
 the start tile.  MPCP serves as the intermediate step in the undecidability
-reduction chain `Lu ≤_m MPCP ≤_m PCP`.
+reduction chain `Halt ≤_m MPCP ≤_m PCP`.
 -/
 
 namespace PCP

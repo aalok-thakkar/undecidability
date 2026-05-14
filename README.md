@@ -3,14 +3,14 @@
 A Lean 4 formalisation of the standard reduction chain
 
 ```
-Lu ≤_m MPCP ≤_m PCP
+Halt ≤_m MPCP ≤_m PCP
 ```
 
 connecting the Halting Problem to the Post Correspondence Problem (PCP).
-The top-level theorem (`halts_iff_pcp` in `PCP/Reductions/LuToPCP.lean`)
+The top-level theorem (`halts_iff_pcp` in `PCP/Reductions/HaltToPCP.lean`)
 shows that
 
-  `Halts tm w ↔ HasSolution (mpcpToPcp (startTile tm w) (luTiles tm))`
+  `Halts tm w ↔ HasSolution (mpcpToPcp (startTile tm w) (haltTiles tm))`
 
 for any single-tape Turing machine `tm` and input `w` satisfying the
 Hopcroft–Ullman–Motwani side conditions `NoBlankWrites` and
@@ -38,7 +38,7 @@ mathematical core of the standard PCP-undecidability argument. See
 
 ## Conventions
 
-The `Lu ≤_m MPCP` reduction follows the **Hopcroft–Ullman–Motwani
+The `Halt ≤_m MPCP` reduction follows the **Hopcroft–Ullman–Motwani
 one-sided-tape design**: the simulation tile set does not include a
 `leftMoveBoundaryTile`, and the TM is required to satisfy
 `NoLeftBoundary` (no left-move at the left tape boundary) in addition
@@ -60,12 +60,12 @@ PCP/
   Reduction.lean             -- MPCP ≤_m PCP. Alphabet extension, interleaving,
                                 tile classes, `mpcpToPcp`, and the complete
                                 `mpcp_iff_pcp`.
-  Lu.lean                    -- The halting predicate `Halts` for cslib's
+  Halt.lean                  -- The halting predicate `Halts` for cslib's
                                 `Turing.SingleTapeTM`.
   Reductions/
-    LuToMPCP.lean            -- Lu ≤_m MPCP construction and proofs.
-    LuToPCP.lean             -- `halts_iff_pcp`: composition of
-                                Lu ≤_m MPCP with MPCP ≤_m PCP.
+    HaltToMPCP.lean            -- Halt ≤_m MPCP construction and proofs.
+    HaltToPCP.lean             -- `halts_iff_pcp`: composition of
+                                Halt ≤_m MPCP with MPCP ≤_m PCP.
 PCP.lean                     -- Library root.
 Main.lean                    -- Executable entry point.
 ROADMAP.md                   -- Detailed proof plan and external deps.
@@ -78,10 +78,10 @@ ROADMAP.md                   -- Detailed proof plan and external deps.
 | Core PCP / MPCP API                                        | ✅ complete           |
 | `MPCP ≤_m PCP` (full `mpcp_iff_pcp`)                       | ✅ complete           |
 | `Halts` predicate for `SingleTapeTM`                       | ✅ complete           |
-| `Lu ≤_m MPCP`: tile set + HUM refactor (`NoLeftBoundary`)  | ✅ complete           |
-| `Lu ≤_m MPCP`: forward direction (`Halts → MHasSolution`)  | ✅ complete           |
-| `Lu ≤_m MPCP`: backward direction (`MHasSolution → Halts`) | ✅ complete           |
-| Canonical `lu_le_mpcp` (`Halts ↔ MHasSolution`)            | ✅ complete           |
+| `Halt ≤_m MPCP`: tile set + HUM refactor (`NoLeftBoundary`)  | ✅ complete           |
+| `Halt ≤_m MPCP`: forward direction (`Halts → MHasSolution`)  | ✅ complete           |
+| `Halt ≤_m MPCP`: backward direction (`MHasSolution → Halts`) | ✅ complete           |
+| Canonical `halt_le_mpcp` (`Halts ↔ MHasSolution`)            | ✅ complete           |
 | `halts_iff_pcp` (composition `Halts ↔ HasSolution …`)      | ✅ complete           |
 | Halting-problem undecidability for `SingleTapeTM`          | 🚧 Mathlib proves it for `Nat.Partrec.Code`; bridge to cslib's `SingleTapeTM` is future work |
 | HUM normalisation (lifting `NoBlankWrites`/`NoLeftBoundary`)| 🚧 future work        |
@@ -96,11 +96,11 @@ top/bot words, produce a `tileStart`/`tileReg`/`tileEnd` triple, and prove
 `match_start` (any solution must begin with the start tile) plus the
 complete forward and backward directions.
 
-### `Lu ≤_m MPCP` (forward) — `PCP/Reductions/LuToMPCP.lean`
+### `Halt ≤_m MPCP` (forward) — `PCP/Reductions/HaltToMPCP.lean`
 
 Given `Halts tm w` together with the two side conditions `NoBlankWrites`
 and `NoLeftBoundary`, constructs a tile sequence
-`A ⊆ startTile :: luTiles tm` satisfying the MPCP matching equation.
+`A ⊆ startTile :: haltTiles tm` satisfying the MPCP matching equation.
 The proof:
 
 1. Prepends `stepTiles tm q tape` for each TM step, dispatching over
@@ -124,17 +124,17 @@ Top-level lemma: `halts_implies_mhasSolution`
 `(tm : SingleTapeTM Symbol) (h_nbw : NoBlankWrites tm) (w : List Symbol)`
 `(h_nlb : NoLeftBoundary tm w) (h : Halts tm w) : MHasSolution …`.
 
-### `Lu ≤_m MPCP` (backward) — canonical iff complete
+### `Halt ≤_m MPCP` (backward) — canonical iff complete
 
 The backward direction inverts the forward construction in two layers.
 
-**Strong-A form** (`lu_le_mpcp_strong`): handles `A ⊆ luTiles tm` via
+**Strong-A form** (`halt_le_mpcp_strong`): handles `A ⊆ haltTiles tm` via
 strong induction on `A.length`, peeling one canonical "block" off the
 front of `A` per TM step.
 
 | Lemma                                  | Role                                             |
 |----------------------------------------|--------------------------------------------------|
-| `mem_luTiles_top`                      | Identify each tile in `luTiles` by its constructor |
+| `mem_haltTiles_top`                      | Identify each tile in `haltTiles` by its constructor |
 | `copy_prefix_forced`                   | Force `copyTile`s on a `liftTape`-prefix         |
 | `transition_forced`                    | Force the transition tile after a state marker   |
 | `copy_prefix_forced_state_lead`        | Strip copies up to a state marker (non-left)     |
@@ -145,7 +145,7 @@ front of `A` per TM step.
 | `starts_with_stepTilesRightBoundary`   | Backward step, right-move, `t.right = []`        |
 | `starts_with_stepTilesLeftInterior`    | Backward step, left-move, `t.left ≠ []`          |
 | `backward_aux`                         | Main strong-induction driver (strong hypothesis) |
-| `lu_le_mpcp_strong`                    | Strong-A top-level theorem                       |
+| `halt_le_mpcp_strong`                    | Strong-A top-level theorem                       |
 
 The left-boundary sub-case is *removed* by the HUM refactor: the
 `NoLeftBoundary` constraint ensures no reachable cfg ever invokes a
@@ -155,7 +155,7 @@ step to a halted cfg, then `ReflTransGen.refl`) — this sidesteps the
 need for a `starts_with_absorbAndFinish` lemma, which would otherwise
 fail because the absorption-phase decomposition is non-unique.
 
-**Canonical form** (`lu_le_mpcp`): handles `A ⊆ startTile :: luTiles tm`
+**Canonical form** (`halt_le_mpcp`): handles `A ⊆ startTile :: haltTiles tm`
 via `backward_aux_weak`, which threads a chain-tracked cfg queue
 `List (Σ' c, ReflTransGen ... initCfg c)`. When `startTile` appears
 mid-stream in `A`, it pushes an extra `initCfg` (with a `refl` chain)
@@ -165,19 +165,19 @@ right-boundary alternative `rightMoveTile` path is ruled out by
 `tau1 A` never contains `↟ₛq :: # :: …` as a sublist (no tile's top has
 `↟ₛq` followed by `#`, and no top ends with `↟ₛq`).
 
-### `Lu ≤_m PCP` — `PCP/Reductions/LuToPCP.lean`
+### `Halt ≤_m PCP` — `PCP/Reductions/HaltToPCP.lean`
 
 ```lean
 theorem halts_iff_pcp (tm : SingleTapeTM Symbol) (w : List Symbol)
     (h_nbw : NoBlankWrites tm) (h_nlb : NoLeftBoundary tm w) :
     Halts tm w ↔
-    HasSolution (mpcpToPcp (startTile tm w) (luTiles tm)) :=
-  (lu_le_mpcp tm h_nbw w h_nlb).trans (mpcp_iff_pcp _ _)
+    HasSolution (mpcpToPcp (startTile tm w) (haltTiles tm)) :=
+  (halt_le_mpcp tm h_nbw w h_nlb).trans (mpcp_iff_pcp _ _)
 ```
 
 The transitive composition of the two reductions: `Halts` and PCP
 solvability of the explicit, computably constructed instance
-`mpcpToPcp (startTile tm w) (luTiles tm)` are equivalent.
+`mpcpToPcp (startTile tm w) (haltTiles tm)` are equivalent.
 
 ## Next steps
 

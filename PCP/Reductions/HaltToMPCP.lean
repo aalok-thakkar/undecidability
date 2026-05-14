@@ -6,16 +6,16 @@ Authors: Aalok Thakkar
 
 module
 
-public import PCP.Lu
+public import PCP.Halt
 public import PCP.MPCP
 
 @[expose] public section
 
 /-!
-# Lu ≤_m MPCP
+# Halt ≤_m MPCP
 
 This file builds the reduction from the Halting Problem (`Halts`, see
-`PCP.Lu`) to the Modified Post Correspondence Problem (`MHasSolution`).
+`PCP.Halt`) to the Modified Post Correspondence Problem (`MHasSolution`).
 
 ## High-level idea
 
@@ -85,14 +85,14 @@ is left for a future `PCP.Normalize` module.
   transition-tile constructors, `absorbLeftTile`, `absorbRightTile`,
   `finalTile`).
 * Tile enumeration (`copyTiles`, `absorbTiles`, `transitionTiles`,
-  `luTiles`) and the reduction function `luToMpcp`.
+  `haltTiles`) and the reduction function `haltToMpcp`.
 * Step-simulation lemmas for all four reachable TM-step cases (no-move,
   right-interior, right-boundary, left-interior).
 * Halt-absorption iteration lemmas culminating in
   `absorbAndFinish_matching`.
 * `forward_aux` and `halts_implies_mhasSolution` — the forward
   direction.
-* `mem_luTiles_top`, `copy_prefix_forced`, `transition_forced`,
+* `mem_haltTiles_top`, `copy_prefix_forced`, `transition_forced`,
   `sep_forced`, `no_tile_for_state_sharp` and their queue-aware variants
   — the structural forcing lemmas used by the backward proof.
 * Per-step backward lemmas `starts_with_stepTiles*` (canonical) and
@@ -102,13 +102,13 @@ is left for a future `PCP.Normalize` module.
   case.
 * `backward_aux_weak` — the main backward driver, strong induction on
   `A.length` with a chain-tracked cfg queue.
-* `lu_le_mpcp` — the canonical `Halts ↔ MHasSolution` iff (top-level
+* `halt_le_mpcp` — the canonical `Halts ↔ MHasSolution` iff (top-level
   theorem of this file).
 
 See `ROADMAP.md` at the project root for the dependency tree.
 -/
 
-namespace PCP.LuToMPCP
+namespace PCP.HaltToMPCP
 
 open Turing PCP
 
@@ -411,7 +411,7 @@ noncomputable def transitionTiles (tm : SingleTapeTM Symbol) :
     noncomputable in Lean. The underlying enumeration is conceptually a
     finite set of tiles — we use it only as a mathematical object inside
     `MHasSolution`. -/
-noncomputable def luTiles (tm : SingleTapeTM Symbol) :
+noncomputable def haltTiles (tm : SingleTapeTM Symbol) :
     Stack (Alpha tm.State Symbol) :=
   copyTiles tm ++
   [sepTile tm] ++
@@ -422,56 +422,56 @@ noncomputable def luTiles (tm : SingleTapeTM Symbol) :
 /-! ## The reduction
 
 Pair the start tile with the rest of the tiles. The MPCP instance for
-`Halts tm w` is `MHasSolution (startTile tm w) (luTiles tm)`. -/
+`Halts tm w` is `MHasSolution (startTile tm w) (haltTiles tm)`. -/
 
-/-- The reduction `Lu ≤_m MPCP` packaged as a function from
+/-- The reduction `Halt ≤_m MPCP` packaged as a function from
     `(tm, w)` to an MPCP instance `(start, rest)`. -/
-noncomputable def luToMpcp (tm : SingleTapeTM Symbol) (w : List Symbol) :
+noncomputable def haltToMpcp (tm : SingleTapeTM Symbol) (w : List Symbol) :
     Tile (Alpha tm.State Symbol) × Stack (Alpha tm.State Symbol) :=
-  (startTile tm w, luTiles tm)
+  (startTile tm w, haltTiles tm)
 
 /-! ## Tile-membership lemmas
 
 These are the basic facts that the constructed tiles actually belong to
-`luTiles tm`. They form the bookkeeping backbone of both directions of
-the main theorem (the start-tile is *not* in `luTiles` — it is the
+`haltTiles tm`. They form the bookkeeping backbone of both directions of
+the main theorem (the start-tile is *not* in `haltTiles` — it is the
 forced start argument of `MHasSolution`). -/
 
-/-- The copy tile for `a` is in `luTiles`. -/
-lemma copyTile_mem_luTiles (tm : SingleTapeTM Symbol) (a : Option Symbol) :
-    copyTile tm a ∈ luTiles tm := by
+/-- The copy tile for `a` is in `haltTiles`. -/
+lemma copyTile_mem_haltTiles (tm : SingleTapeTM Symbol) (a : Option Symbol) :
+    copyTile tm a ∈ haltTiles tm := by
   refine List.mem_append_left _ ?_
   refine List.mem_append_left _ ?_
   refine List.mem_append_left _ ?_
   refine List.mem_append_left _ ?_
   exact List.mem_map.mpr ⟨a, Finset.mem_toList.mpr (Finset.mem_univ a), rfl⟩
 
-/-- The separator-copy tile is in `luTiles`. -/
-lemma sepTile_mem_luTiles (tm : SingleTapeTM Symbol) :
-    sepTile tm ∈ luTiles tm := by
+/-- The separator-copy tile is in `haltTiles`. -/
+lemma sepTile_mem_haltTiles (tm : SingleTapeTM Symbol) :
+    sepTile tm ∈ haltTiles tm := by
   refine List.mem_append_left _ ?_
   refine List.mem_append_left _ ?_
   refine List.mem_append_left _ ?_
   exact List.mem_append_right _ (List.mem_singleton.mpr rfl)
 
-/-- The final tile is in `luTiles`. -/
-lemma finalTile_mem_luTiles (tm : SingleTapeTM Symbol) :
-    finalTile tm ∈ luTiles tm := by
+/-- The final tile is in `haltTiles`. -/
+lemma finalTile_mem_haltTiles (tm : SingleTapeTM Symbol) :
+    finalTile tm ∈ haltTiles tm := by
   refine List.mem_append_right _ ?_
   exact List.mem_singleton.mpr rfl
 
-/-- The left halt-absorb tile for `a` is in `luTiles`. -/
-lemma absorbLeftTile_mem_luTiles (tm : SingleTapeTM Symbol) (a : Option Symbol) :
-    absorbLeftTile tm a ∈ luTiles tm := by
+/-- The left halt-absorb tile for `a` is in `haltTiles`. -/
+lemma absorbLeftTile_mem_haltTiles (tm : SingleTapeTM Symbol) (a : Option Symbol) :
+    absorbLeftTile tm a ∈ haltTiles tm := by
   refine List.mem_append_left _ ?_
   refine List.mem_append_right _ ?_
   refine List.mem_flatMap.mpr ?_
   refine ⟨a, Finset.mem_toList.mpr (Finset.mem_univ a), ?_⟩
   exact List.mem_cons_self
 
-/-- The right halt-absorb tile for `a` is in `luTiles`. -/
-lemma absorbRightTile_mem_luTiles (tm : SingleTapeTM Symbol) (a : Option Symbol) :
-    absorbRightTile tm a ∈ luTiles tm := by
+/-- The right halt-absorb tile for `a` is in `haltTiles`. -/
+lemma absorbRightTile_mem_haltTiles (tm : SingleTapeTM Symbol) (a : Option Symbol) :
+    absorbRightTile tm a ∈ haltTiles tm := by
   refine List.mem_append_left _ ?_
   refine List.mem_append_right _ ?_
   refine List.mem_flatMap.mpr ?_
@@ -487,11 +487,11 @@ lemma transitionTilesFor_subset_transitionTiles (tm : SingleTapeTM Symbol)
   refine List.mem_flatMap.mpr ⟨(q, a), ?_, ht⟩
   exact Finset.mem_toList.mpr (Finset.mem_univ _)
 
-/-- Every transition tile is in `luTiles`. -/
-lemma transitionTile_mem_luTiles (tm : SingleTapeTM Symbol) (q : tm.State)
+/-- Every transition tile is in `haltTiles`. -/
+lemma transitionTile_mem_haltTiles (tm : SingleTapeTM Symbol) (q : tm.State)
     (a : Option Symbol) (t : Tile (Alpha tm.State Symbol))
     (ht : t ∈ transitionTilesFor tm q a) :
-    t ∈ luTiles tm := by
+    t ∈ haltTiles tm := by
   refine List.mem_append_left _ ?_
   refine List.mem_append_left _ ?_
   refine List.mem_append_right _ ?_
@@ -532,13 +532,13 @@ lemma tau2_singleton (tm : SingleTapeTM Symbol) (t : Tile (Alpha tm.State Symbol
     tau2 [t] = t.bot := by
   simp [tau2_cons]
 
-/-- A list of copy tiles consists entirely of tiles from `luTiles`. -/
-lemma map_copyTile_subset_luTiles (tm : SingleTapeTM Symbol)
+/-- A list of copy tiles consists entirely of tiles from `haltTiles`. -/
+lemma map_copyTile_subset_haltTiles (tm : SingleTapeTM Symbol)
     (syms : List (Option Symbol)) (t : Tile (Alpha tm.State Symbol))
     (ht : t ∈ syms.map (copyTile tm)) :
-    t ∈ luTiles tm := by
+    t ∈ haltTiles tm := by
   obtain ⟨a, _, rfl⟩ := List.mem_map.mp ht
-  exact copyTile_mem_luTiles tm a
+  exact copyTile_mem_haltTiles tm a
 
 /-! ## Structural facts about `startTile` and `block` -/
 
@@ -609,30 +609,30 @@ lemma tau2_stepTilesNoMove (tm : SingleTapeTM Symbol) (q : tm.State)
              List.append_nil, liftTape_cons]
   simp [List.append_assoc]
 
-/-- Every tile in `stepTilesNoMove` is a member of `luTiles`. -/
-lemma stepTilesNoMove_subset_luTiles (tm : SingleTapeTM Symbol)
+/-- Every tile in `stepTilesNoMove` is a member of `haltTiles`. -/
+lemma stepTilesNoMove_subset_haltTiles (tm : SingleTapeTM Symbol)
     (q : tm.State) (a : Option Symbol) (qNew : Option tm.State)
     (t : BiTape Symbol) (w : Option Symbol)
     (htr : tm.tr q a = (⟨w, none⟩, qNew))
     (hhead : t.head = a)
     (tile : Tile (Alpha tm.State Symbol))
     (htile : tile ∈ stepTilesNoMove tm q qNew t w) :
-    tile ∈ luTiles tm := by
+    tile ∈ haltTiles tm := by
   simp only [stepTilesNoMove, List.mem_append, List.mem_cons,
              List.not_mem_nil, or_false] at htile
   rcases htile with ((hl | rfl) | hr) | rfl
   · -- copy of a left symbol
-    exact map_copyTile_subset_luTiles tm _ tile hl
+    exact map_copyTile_subset_haltTiles tm _ tile hl
   · -- the transition tile itself
-    refine transitionTile_mem_luTiles tm q a _ ?_
+    refine transitionTile_mem_haltTiles tm q a _ ?_
     simp only [transitionTilesFor]
     rw [show tm.tr q a = (⟨w, none⟩, qNew) from htr]
     subst hhead
     exact List.mem_cons_self
   · -- copy of a right symbol
-    exact map_copyTile_subset_luTiles tm _ tile hr
+    exact map_copyTile_subset_haltTiles tm _ tile hr
   · -- the separator tile
-    exact sepTile_mem_luTiles tm
+    exact sepTile_mem_haltTiles tm
 
 /-! ## Simulation tiles for one TM step (right-move, interior case)
 
@@ -696,30 +696,30 @@ lemma tau2_stepTilesRightInterior (tm : SingleTapeTM Symbol) (q : tm.State)
              tau2_map_copyTile, rightMoveTile_bot, sepTile_bot,
              List.append_nil]
 
-/-- Every tile in `stepTilesRightInterior` is a member of `luTiles`. -/
-lemma stepTilesRightInterior_subset_luTiles (tm : SingleTapeTM Symbol)
+/-- Every tile in `stepTilesRightInterior` is a member of `haltTiles`. -/
+lemma stepTilesRightInterior_subset_haltTiles (tm : SingleTapeTM Symbol)
     (q : tm.State) (a : Option Symbol) (qNew : Option tm.State)
     (t : BiTape Symbol) (w : Option Symbol)
     (htr : tm.tr q a = (⟨w, some Dir.right⟩, qNew))
     (hhead : t.head = a)
     (tile : Tile (Alpha tm.State Symbol))
     (htile : tile ∈ stepTilesRightInterior tm q qNew t w) :
-    tile ∈ luTiles tm := by
+    tile ∈ haltTiles tm := by
   simp only [stepTilesRightInterior, List.mem_append, List.mem_cons,
              List.not_mem_nil, or_false] at htile
   rcases htile with ((hl | rfl) | hr) | rfl
   · -- copy of a left symbol
-    exact map_copyTile_subset_luTiles tm _ tile hl
+    exact map_copyTile_subset_haltTiles tm _ tile hl
   · -- the transition tile itself
-    refine transitionTile_mem_luTiles tm q a _ ?_
+    refine transitionTile_mem_haltTiles tm q a _ ?_
     simp only [transitionTilesFor]
     rw [show tm.tr q a = (⟨w, some Dir.right⟩, qNew) from htr]
     subst hhead
     exact List.mem_cons_self
   · -- copy of a right symbol
-    exact map_copyTile_subset_luTiles tm _ tile hr
+    exact map_copyTile_subset_haltTiles tm _ tile hr
   · -- the separator tile
-    exact sepTile_mem_luTiles tm
+    exact sepTile_mem_haltTiles tm
 
 /-! ### Connecting `tau2_stepTilesRightInterior` to `encodeCfg` of the
     post-step configuration (non-degenerate case). -/
@@ -893,22 +893,22 @@ lemma tau2_stepTilesRightBoundary (tm : SingleTapeTM Symbol) (q : tm.State)
              tau2_map_copyTile, rightMoveBoundaryTile_bot,
              List.append_nil]
 
-/-- Every tile in `stepTilesRightBoundary` is a member of `luTiles`. -/
-lemma stepTilesRightBoundary_subset_luTiles (tm : SingleTapeTM Symbol)
+/-- Every tile in `stepTilesRightBoundary` is a member of `haltTiles`. -/
+lemma stepTilesRightBoundary_subset_haltTiles (tm : SingleTapeTM Symbol)
     (q : tm.State) (a : Option Symbol) (qNew : Option tm.State)
     (t : BiTape Symbol) (w : Option Symbol)
     (htr : tm.tr q a = (⟨w, some Dir.right⟩, qNew))
     (hhead : t.head = a)
     (tile : Tile (Alpha tm.State Symbol))
     (htile : tile ∈ stepTilesRightBoundary tm q qNew t w) :
-    tile ∈ luTiles tm := by
+    tile ∈ haltTiles tm := by
   simp only [stepTilesRightBoundary, List.mem_append, List.mem_cons,
              List.not_mem_nil, or_false] at htile
   rcases htile with hl | rfl
   · -- copy of a left symbol
-    exact map_copyTile_subset_luTiles tm _ tile hl
+    exact map_copyTile_subset_haltTiles tm _ tile hl
   · -- the right-move boundary tile
-    refine transitionTile_mem_luTiles tm q a _ ?_
+    refine transitionTile_mem_haltTiles tm q a _ ?_
     simp only [transitionTilesFor]
     rw [show tm.tr q a = (⟨w, some Dir.right⟩, qNew) from htr]
     subst hhead
@@ -1039,24 +1039,24 @@ lemma tau2_stepTilesLeftInterior (tm : SingleTapeTM Symbol) (q : tm.State)
              tau2_map_copyTile, leftMoveTile_bot, sepTile_bot,
              List.append_nil]
 
-/-- Every tile in `stepTilesLeftInterior` is a member of `luTiles`. -/
-lemma stepTilesLeftInterior_subset_luTiles (tm : SingleTapeTM Symbol)
+/-- Every tile in `stepTilesLeftInterior` is a member of `haltTiles`. -/
+lemma stepTilesLeftInterior_subset_haltTiles (tm : SingleTapeTM Symbol)
     (q : tm.State) (a : Option Symbol) (qNew : Option tm.State)
     (t : BiTape Symbol) (w : Option Symbol)
     (htr : tm.tr q a = (⟨w, some Dir.left⟩, qNew))
     (hhead : t.head = a)
     (tile : Tile (Alpha tm.State Symbol))
     (htile : tile ∈ stepTilesLeftInterior tm q qNew t w) :
-    tile ∈ luTiles tm := by
+    tile ∈ haltTiles tm := by
   simp only [stepTilesLeftInterior, List.mem_append, List.mem_cons,
              List.not_mem_nil, or_false] at htile
   rcases htile with ((hl | rfl) | hr) | rfl
-  · exact map_copyTile_subset_luTiles tm _ tile hl
-  · refine transitionTile_mem_luTiles tm q a _ ?_
+  · exact map_copyTile_subset_haltTiles tm _ tile hl
+  · refine transitionTile_mem_haltTiles tm q a _ ?_
     subst hhead
     exact leftMoveTile_mem_transitionTilesFor tm q t.head w qNew t.left.head htr
-  · exact map_copyTile_subset_luTiles tm _ tile hr
-  · exact sepTile_mem_luTiles tm
+  · exact map_copyTile_subset_haltTiles tm _ tile hr
+  · exact sepTile_mem_haltTiles tm
 
 /-- The encoding of the configuration after one left-move step,
     in the non-degenerate case (so the new right side really is
@@ -1156,10 +1156,10 @@ lemma tau2_stepTilesLeftBoundary (tm : SingleTapeTM Symbol) (q : tm.State)
              tau2_map_copyTile, leftMoveBoundaryTile_bot, sepTile_bot,
              List.append_nil]
 
--- NOTE: `stepTilesLeftBoundary_subset_luTiles` is intentionally not
+-- NOTE: `stepTilesLeftBoundary_subset_haltTiles` is intentionally not
 -- provided. Following Hopcroft–Ullman–Motwani's one-sided tape design,
--- `leftMoveBoundaryTile` is *not* in `luTiles`, so the sequence
--- `stepTilesLeftBoundary` is not a sub-sequence of `luTiles` either.
+-- `leftMoveBoundaryTile` is *not* in `haltTiles`, so the sequence
+-- `stepTilesLeftBoundary` is not a sub-sequence of `haltTiles` either.
 -- The forward direction is gated by `NoLeftBoundary`, which ensures
 -- the dispatcher (`stepTilesAux`) never enters the left-boundary branch
 -- in a reachable configuration.
@@ -1314,34 +1314,34 @@ lemma tau2_stepTilesAbsorbRight (tm : SingleTapeTM Symbol)
              tau2_map_copyTile, absorbRightTile_bot, sepTile_bot,
              List.append_nil, encodeHaltList]
 
-/-! ### Membership of absorption iterations in `luTiles` -/
+/-! ### Membership of absorption iterations in `haltTiles` -/
 
-lemma stepTilesAbsorbLeft_subset_luTiles (tm : SingleTapeTM Symbol)
+lemma stepTilesAbsorbLeft_subset_haltTiles (tm : SingleTapeTM Symbol)
     (l : Option Symbol) (rest right : List (Option Symbol))
     (tile : Tile (Alpha tm.State Symbol))
     (htile : tile ∈ stepTilesAbsorbLeft tm l rest right) :
-    tile ∈ luTiles tm := by
+    tile ∈ haltTiles tm := by
   simp only [stepTilesAbsorbLeft, List.mem_append, List.mem_cons,
              List.not_mem_nil, or_false] at htile
   rcases htile with ((hl | rfl) | hr) | rfl
-  · exact map_copyTile_subset_luTiles tm _ tile hl
-  · exact absorbLeftTile_mem_luTiles tm l
-  · exact map_copyTile_subset_luTiles tm _ tile hr
-  · exact sepTile_mem_luTiles tm
+  · exact map_copyTile_subset_haltTiles tm _ tile hl
+  · exact absorbLeftTile_mem_haltTiles tm l
+  · exact map_copyTile_subset_haltTiles tm _ tile hr
+  · exact sepTile_mem_haltTiles tm
 
-lemma stepTilesAbsorbRight_subset_luTiles (tm : SingleTapeTM Symbol)
+lemma stepTilesAbsorbRight_subset_haltTiles (tm : SingleTapeTM Symbol)
     (left : List (Option Symbol)) (r : Option Symbol)
     (rest : List (Option Symbol))
     (tile : Tile (Alpha tm.State Symbol))
     (htile : tile ∈ stepTilesAbsorbRight tm left r rest) :
-    tile ∈ luTiles tm := by
+    tile ∈ haltTiles tm := by
   simp only [stepTilesAbsorbRight, List.mem_append, List.mem_cons,
              List.not_mem_nil, or_false] at htile
   rcases htile with ((hl | rfl) | hr) | rfl
-  · exact map_copyTile_subset_luTiles tm _ tile hl
-  · exact absorbRightTile_mem_luTiles tm r
-  · exact map_copyTile_subset_luTiles tm _ tile hr
-  · exact sepTile_mem_luTiles tm
+  · exact map_copyTile_subset_haltTiles tm _ tile hl
+  · exact absorbRightTile_mem_haltTiles tm r
+  · exact map_copyTile_subset_haltTiles tm _ tile hr
+  · exact sepTile_mem_haltTiles tm
 
 /-! ### `absorbAndFinish`: the absorption-phase tile suffix
 
@@ -1385,26 +1385,26 @@ lemma absorbAndFinish_matching (tm : SingleTapeTM Symbol)
                tau1_stepTilesAbsorbLeft, tau2_stepTilesAbsorbLeft, ih,
                List.append_assoc]
 
-/-- Every tile in `absorbAndFinish` belongs to `luTiles`. -/
-lemma absorbAndFinish_subset_luTiles (tm : SingleTapeTM Symbol)
+/-- Every tile in `absorbAndFinish` belongs to `haltTiles`. -/
+lemma absorbAndFinish_subset_haltTiles (tm : SingleTapeTM Symbol)
     (left right : List (Option Symbol))
     (tile : Tile (Alpha tm.State Symbol))
     (htile : tile ∈ absorbAndFinish tm left right) :
-    tile ∈ luTiles tm := by
+    tile ∈ haltTiles tm := by
   induction left, right using absorbAndFinish.induct with
   | case1 =>
     simp only [absorbAndFinish, List.mem_singleton] at htile
     rw [htile]
-    exact finalTile_mem_luTiles tm
+    exact finalTile_mem_haltTiles tm
   | case2 r rest ih =>
     simp only [absorbAndFinish, List.mem_append] at htile
     rcases htile with hL | hR
-    · exact stepTilesAbsorbRight_subset_luTiles tm [] r rest tile hL
+    · exact stepTilesAbsorbRight_subset_haltTiles tm [] r rest tile hL
     · exact ih hR
   | case3 l rest right ih =>
     simp only [absorbAndFinish, List.mem_append] at htile
     rcases htile with hL | hR
-    · exact stepTilesAbsorbLeft_subset_luTiles tm l rest right tile hL
+    · exact stepTilesAbsorbLeft_subset_haltTiles tm l rest right tile hL
     · exact ih hR
 
 /-! ## Dispatch over a single TM step
@@ -1419,7 +1419,7 @@ writes a blank and the corresponding side of the tape is empty. -/
 
 /-- A TM is *blank-write free* iff its transition function never writes
     the blank symbol. This sidesteps the cslib `BiTape` stripping
-    issue that arises in the `Lu ≤_m MPCP` simulation when a blank is
+    issue that arises in the `Halt ≤_m MPCP` simulation when a blank is
     written into a previously-empty boundary side. -/
 def NoBlankWrites (tm : SingleTapeTM Symbol) : Prop :=
   ∀ q : tm.State, ∀ a : Option Symbol, ((tm.tr q a).1).symbol ≠ none
@@ -1498,7 +1498,7 @@ lemma tau1_stepTilesAux (tm : SingleTapeTM Symbol) (q : tm.State)
         refine tau1_stepTilesLeftInterior tm q qNew t w ?_
         rw [h_left]; exact List.cons_ne_nil _ _
 
-lemma stepTilesAux_subset_luTiles (tm : SingleTapeTM Symbol) (q : tm.State)
+lemma stepTilesAux_subset_haltTiles (tm : SingleTapeTM Symbol) (q : tm.State)
     (a : Option Symbol) (t : BiTape Symbol) (w : Option Symbol)
     (mov : Option Dir) (qNew : Option tm.State)
     (htr : tm.tr q a = (⟨w, mov⟩, qNew))
@@ -1506,20 +1506,20 @@ lemma stepTilesAux_subset_luTiles (tm : SingleTapeTM Symbol) (q : tm.State)
     (h_no_lb : mov = some Dir.left → t.left.toList ≠ [])
     (tile : Tile (Alpha tm.State Symbol))
     (htile : tile ∈ stepTilesAux tm q t w mov qNew) :
-    tile ∈ luTiles tm := by
+    tile ∈ haltTiles tm := by
   unfold stepTilesAux at htile
   cases mov with
-  | none => exact stepTilesNoMove_subset_luTiles tm q a qNew t w htr hhead tile htile
+  | none => exact stepTilesNoMove_subset_haltTiles tm q a qNew t w htr hhead tile htile
   | some dir =>
     cases dir with
     | right =>
       cases h_right : t.right.toList with
       | nil =>
         rw [h_right] at htile
-        exact stepTilesRightBoundary_subset_luTiles tm q a qNew t w htr hhead tile htile
+        exact stepTilesRightBoundary_subset_haltTiles tm q a qNew t w htr hhead tile htile
       | cons _ _ =>
         rw [h_right] at htile
-        exact stepTilesRightInterior_subset_luTiles tm q a qNew t w htr hhead tile htile
+        exact stepTilesRightInterior_subset_haltTiles tm q a qNew t w htr hhead tile htile
     | left =>
       cases h_left : t.left.toList with
       | nil =>
@@ -1528,7 +1528,7 @@ lemma stepTilesAux_subset_luTiles (tm : SingleTapeTM Symbol) (q : tm.State)
         exact absurd h_left (h_no_lb rfl)
       | cons _ _ =>
         rw [h_left] at htile
-        exact stepTilesLeftInterior_subset_luTiles tm q a qNew t w htr hhead tile htile
+        exact stepTilesLeftInterior_subset_haltTiles tm q a qNew t w htr hhead tile htile
 
 lemma tau2_stepTilesAux (tm : SingleTapeTM Symbol) (q : tm.State)
     (t : BiTape Symbol) (w : Option Symbol) (mov : Option Dir)
@@ -1580,20 +1580,20 @@ lemma tau1_stepTiles (tm : SingleTapeTM Symbol) (q : tm.State)
   unfold stepTiles
   exact tau1_stepTilesAux tm q t _ _ _
 
-/-- Every tile in `stepTiles` is a member of `luTiles`, provided the
+/-- Every tile in `stepTiles` is a member of `haltTiles`, provided the
 TM does not invoke a left-move at the left boundary in this cfg. -/
-lemma stepTiles_subset_luTiles (tm : SingleTapeTM Symbol) (q : tm.State)
+lemma stepTiles_subset_haltTiles (tm : SingleTapeTM Symbol) (q : tm.State)
     (t : BiTape Symbol)
     (h_no_lb : (tm.tr q t.head).1.movement = some Dir.left →
         t.left.toList ≠ [])
     (tile : Tile (Alpha tm.State Symbol))
     (htile : tile ∈ stepTiles tm q t) :
-    tile ∈ luTiles tm := by
+    tile ∈ haltTiles tm := by
   unfold stepTiles at htile
   have htr : tm.tr q t.head =
       (⟨(tm.tr q t.head).1.symbol, (tm.tr q t.head).1.movement⟩, (tm.tr q t.head).2) := by
     rcases tm.tr q t.head with ⟨⟨_, _⟩, _⟩; rfl
-  exact stepTilesAux_subset_luTiles tm q t.head t _ _ _ htr rfl h_no_lb tile htile
+  exact stepTilesAux_subset_haltTiles tm q t.head t _ _ _ htr rfl h_no_lb tile htile
 
 /-- The bottom concatenation of `stepTiles` is the encoded *next*
     configuration block. Requires `NoBlankWrites` to rule out the
@@ -1615,7 +1615,7 @@ sub-sequence and invokes the IH on the residual chain. -/
 
 /-- The auxiliary forward lemma, indexed by the chain length `n`.
 The `NoLeftBoundary` hypothesis lets us discharge the left-boundary
-sub-case of `stepTilesAux_subset_luTiles` at every reachable cfg. -/
+sub-case of `stepTilesAux_subset_haltTiles` at every reachable cfg. -/
 lemma forward_aux (tm : SingleTapeTM Symbol) (h_nbw : NoBlankWrites tm)
     (w : List Symbol) (h_nlb : NoLeftBoundary tm w)
     (target_tape : BiTape Symbol) :
@@ -1625,7 +1625,7 @@ lemma forward_aux (tm : SingleTapeTM Symbol) (h_nbw : NoBlankWrites tm)
       Relation.RelatesInSteps tm.TransitionRelation cfg
         ⟨none, target_tape⟩ n →
       ∃ A : Stack (Alpha tm.State Symbol),
-        (∀ tile ∈ A, tile ∈ luTiles tm) ∧
+        (∀ tile ∈ A, tile ∈ haltTiles tm) ∧
         tau1 A = encodeCfg tm cfg ++ [#] ++ tau2 A := by
   intro cfg n h_reach h_chain
   induction n generalizing cfg with
@@ -1636,7 +1636,7 @@ lemma forward_aux (tm : SingleTapeTM Symbol) (h_nbw : NoBlankWrites tm)
               (target_tape.head :: target_tape.right.toList),
             ?_, ?_⟩
     · intro tile htile
-      exact absorbAndFinish_subset_luTiles tm _ _ tile htile
+      exact absorbAndFinish_subset_haltTiles tm _ _ tile htile
     · rw [show
           encodeCfg tm (⟨none, target_tape⟩ : tm.Cfg) = encodeHaltedCfg tm target_tape from rfl,
           encodeHaltedCfg_eq_encodeHaltList]
@@ -1674,21 +1674,21 @@ lemma forward_aux (tm : SingleTapeTM Symbol) (h_nbw : NoBlankWrites tm)
         · intro tile htile
           rw [List.mem_append] at htile
           rcases htile with hL | hR
-          · exact stepTiles_subset_luTiles tm q tape h_no_lb tile hL
+          · exact stepTiles_subset_haltTiles tm q tape h_no_lb tile hL
           · exact hA'_mem tile hR
         · rw [tau1_append, tau2_append,
               tau1_stepTiles, tau2_stepTiles tm h_nbw, hA'_match]
           rw [encodeCfg_running]
 
 /-- **Forward direction**: if `Halts tm w`, then the reduced MPCP
-    instance `(startTile tm w, luTiles tm)` has a solution. Requires
+    instance `(startTile tm w, haltTiles tm)` has a solution. Requires
     `NoBlankWrites` (the TM never writes a blank) and `NoLeftBoundary`
     (the TM never invokes a left-move at the left boundary, HUM's
     one-sided-tape convention). -/
 theorem halts_implies_mhasSolution (tm : SingleTapeTM Symbol)
     (h_nbw : NoBlankWrites tm) (w : List Symbol)
     (h_nlb : NoLeftBoundary tm w) (h : Halts tm w) :
-    MHasSolution (startTile tm w) (luTiles tm) := by
+    MHasSolution (startTile tm w) (haltTiles tm) := by
   obtain ⟨target_tape, h_chain⟩ := h
   obtain ⟨n, h_chain_n⟩ := h_chain.relatesInSteps
   obtain ⟨A, hA_mem, hA_match⟩ :=
@@ -1708,8 +1708,8 @@ theorem halts_implies_mhasSolution (tm : SingleTapeTM Symbol)
 
 The backward direction is established in two layers:
 
-1. A **strong-A form** (`lu_le_mpcp_strong`, proved via `backward_aux`)
-   handles `A ⊆ luTiles tm`. It performs strong induction on `A.length`,
+1. A **strong-A form** (`halt_le_mpcp_strong`, proved via `backward_aux`)
+   handles `A ⊆ haltTiles tm`. It performs strong induction on `A.length`,
    peeling one canonical "block" off the front per TM step:
    * `copy_prefix_forced` consumes the left-tape prefix.
    * `transition_forced` selects the unique transition tile for the
@@ -1728,8 +1728,8 @@ The backward direction is established in two layers:
    are valid), so the canonical decomposition cannot be forced. The
    halt-now sub-case sidesteps the absorption phase entirely.
 
-2. A **canonical form** (`lu_le_mpcp`, proved via `backward_aux_weak`)
-   handles `A ⊆ startTile :: luTiles tm`. It threads a chain-tracked
+2. A **canonical form** (`halt_le_mpcp`, proved via `backward_aux_weak`)
+   handles `A ⊆ startTile :: haltTiles tm`. It threads a chain-tracked
    cfg queue `List (Σ' c, ReflTransGen ... initCfg c)`: each queued cfg
    carries its own `ReflTransGen` chain from `initCfg`. When `startTile`
    appears mid-stream in `A`, it pushes an extra `initCfg` (with a
@@ -1740,14 +1740,14 @@ The backward direction is established in two layers:
 
 See `ROADMAP.md` for the detailed dependency tree. -/
 
-/-! ## Step 1: Characterise every tile of `luTiles` -/
+/-! ## Step 1: Characterise every tile of `haltTiles` -/
 
-/-- Every tile `t` in `luTiles tm` is one of eight concrete tiles
+/-- Every tile `t` in `haltTiles tm` is one of eight concrete tiles
 (copy, separator, no-move/right/left transition, absorb-left/right,
 or final). For each case we also expose the relevant TM-transition
 equation so the bot of a transition tile is determined. -/
-private lemma mem_luTiles_top (tm : SingleTapeTM Symbol)
-    (t : Tile (Alpha tm.State Symbol)) (ht : t ∈ luTiles tm) :
+private lemma mem_haltTiles_top (tm : SingleTapeTM Symbol)
+    (t : Tile (Alpha tm.State Symbol)) (ht : t ∈ haltTiles tm) :
     (∃ a : Option Symbol, t = copyTile tm a) ∨
     t = sepTile tm ∨
     (∃ (q : tm.State) (a : Option Symbol) (qNew : Option tm.State)
@@ -1765,7 +1765,7 @@ private lemma mem_luTiles_top (tm : SingleTapeTM Symbol)
     (∃ a : Option Symbol, t = absorbLeftTile tm a) ∨
     (∃ a : Option Symbol, t = absorbRightTile tm a) ∨
     t = finalTile tm := by
-  simp only [luTiles, List.mem_append, List.mem_singleton] at ht
+  simp only [haltTiles, List.mem_append, List.mem_singleton] at ht
   -- ht has left-nested shape: (((copyTiles ∨ sepTile) ∨ transitionTiles) ∨ absorbTiles) ∨ finalTile
   rcases ht with ((((ht | rfl) | ht) | ht) | rfl)
   · -- t ∈ copyTiles tm = Finset.univ.toList.map (copyTile tm)
@@ -1822,14 +1822,14 @@ an `absorbLeftTile` consume the last lift) or with a state symbol `↟ₛq`
 private lemma copy_prefix_forced (tm : SingleTapeTM Symbol) :
     ∀ (L : List (Option Symbol)) (A : Stack (Alpha tm.State Symbol))
       (tail : List (Alpha tm.State Symbol)),
-      (∀ t ∈ A, t ∈ luTiles tm) →
+      (∀ t ∈ A, t ∈ haltTiles tm) →
       tau1 A = liftTape tm L ++ tail →
       (∀ x : List (Alpha tm.State Symbol), tail ≠ h⊥ :: x) →
       (∀ (q : tm.State) (x : List (Alpha tm.State Symbol)),
           tail ≠ ↟ₛq :: x) →
       ∃ A' : Stack (Alpha tm.State Symbol),
           A = L.map (copyTile tm) ++ A' ∧
-          (∀ t ∈ A', t ∈ luTiles tm) ∧
+          (∀ t ∈ A', t ∈ haltTiles tm) ∧
           tau1 A' = tail ∧
           tau2 A = liftTape tm L ++ tau2 A' := by
   intro L
@@ -1842,14 +1842,14 @@ private lemma copy_prefix_forced (tm : SingleTapeTM Symbol) :
     cases A with
     | nil => simp [liftTape_cons] at h_eq
     | cons t A_rest =>
-      have h_t_mem : t ∈ luTiles tm := h_mem t (List.mem_cons_self ..)
-      have h_rest_mem : ∀ s ∈ A_rest, s ∈ luTiles tm :=
+      have h_t_mem : t ∈ haltTiles tm := h_mem t (List.mem_cons_self ..)
+      have h_rest_mem : ∀ s ∈ A_rest, s ∈ haltTiles tm :=
         fun s hs => h_mem s (List.mem_cons_of_mem t hs)
       rw [tau1_cons, liftTape_cons, List.cons_append] at h_eq
-      -- Cases of `mem_luTiles_top`, in order: copy, sep, noMove,
+      -- Cases of `mem_haltTiles_top`, in order: copy, sep, noMove,
       -- right (interior/boundary), left (only interior under HUM),
       -- absorbLeft, absorbRight, final.
-      rcases mem_luTiles_top tm t h_t_mem with
+      rcases mem_haltTiles_top tm t h_t_mem with
           ⟨a', rfl⟩
         | rfl
         | ⟨_, _, _, _, _, rfl⟩
@@ -1904,7 +1904,7 @@ private lemma copy_prefix_forced (tm : SingleTapeTM Symbol) :
 
 /-- When the lead of `tau1 A` is the two-character prefix `↟ₛq ↟ₜa`, the
 first tile of `A` is a transition tile for the pair `(q, a)`. Together
-with `mem_luTiles_top`, this rules out every non-transition tile (their
+with `mem_haltTiles_top`, this rules out every non-transition tile (their
 tops do not start with `↟ₛq`) and pins down `q'` and `a'` of the chosen
 tile constructor as `q` and `a` respectively. The `leftMoveTile` case is
 excluded because its top starts with a tape symbol `↟ₜb`, not `↟ₛq`. -/
@@ -1912,24 +1912,24 @@ private lemma transition_forced (tm : SingleTapeTM Symbol)
     (q : tm.State) (a : Option Symbol)
     (rest : List (Alpha tm.State Symbol))
     (A : Stack (Alpha tm.State Symbol))
-    (h_mem : ∀ t ∈ A, t ∈ luTiles tm)
+    (h_mem : ∀ t ∈ A, t ∈ haltTiles tm)
     (h_eq : tau1 A = ↟ₛq :: ↟ₜa :: rest) :
     ∃ (tile : Tile (Alpha tm.State Symbol))
       (A' : Stack (Alpha tm.State Symbol)),
       A = tile :: A' ∧
       tile ∈ transitionTilesFor tm q a ∧
-      (∀ s ∈ A', s ∈ luTiles tm) := by
+      (∀ s ∈ A', s ∈ haltTiles tm) := by
   cases A with
   | nil => simp at h_eq
   | cons t A_rest =>
-    have h_t_mem : t ∈ luTiles tm := h_mem t (List.mem_cons_self ..)
-    have h_rest_mem : ∀ s ∈ A_rest, s ∈ luTiles tm :=
+    have h_t_mem : t ∈ haltTiles tm := h_mem t (List.mem_cons_self ..)
+    have h_rest_mem : ∀ s ∈ A_rest, s ∈ haltTiles tm :=
       fun s hs => h_mem s (List.mem_cons_of_mem t hs)
     refine ⟨t, A_rest, rfl, ?_, h_rest_mem⟩
     rw [tau1_cons] at h_eq
-    -- The eight cases of `mem_luTiles_top`, in the same order as
+    -- The eight cases of `mem_haltTiles_top`, in the same order as
     -- `copy_prefix_forced` above.
-    rcases mem_luTiles_top tm t h_t_mem with
+    rcases mem_haltTiles_top tm t h_t_mem with
         ⟨_, rfl⟩
       | rfl
       | ⟨q', a', qNew, w, h_tr, rfl⟩
@@ -2012,11 +2012,11 @@ private lemma copy_prefix_forced_state_lead (tm : SingleTapeTM Symbol)
         tm.tr q a ≠ (⟨w, some Dir.left⟩, qNew)) :
     ∀ (L : List (Option Symbol)) (A : Stack (Alpha tm.State Symbol))
       (rest : List (Alpha tm.State Symbol)),
-      (∀ s ∈ A, s ∈ luTiles tm) →
+      (∀ s ∈ A, s ∈ haltTiles tm) →
       tau1 A = liftTape tm L ++ ↟ₛq :: ↟ₜa :: rest →
       ∃ A' : Stack (Alpha tm.State Symbol),
           A = L.map (copyTile tm) ++ A' ∧
-          (∀ s ∈ A', s ∈ luTiles tm) ∧
+          (∀ s ∈ A', s ∈ haltTiles tm) ∧
           tau1 A' = ↟ₛq :: ↟ₜa :: rest ∧
           tau2 A = liftTape tm L ++ tau2 A' := by
   intro L
@@ -2029,11 +2029,11 @@ private lemma copy_prefix_forced_state_lead (tm : SingleTapeTM Symbol)
     cases A with
     | nil => simp [liftTape_cons] at h_eq
     | cons t A_rest =>
-      have h_t_mem : t ∈ luTiles tm := h_mem t (List.mem_cons_self ..)
-      have h_rest_mem : ∀ s ∈ A_rest, s ∈ luTiles tm :=
+      have h_t_mem : t ∈ haltTiles tm := h_mem t (List.mem_cons_self ..)
+      have h_rest_mem : ∀ s ∈ A_rest, s ∈ haltTiles tm :=
         fun s hs => h_mem s (List.mem_cons_of_mem t hs)
       rw [tau1_cons, liftTape_cons, List.cons_append] at h_eq
-      rcases mem_luTiles_top tm t h_t_mem with
+      rcases mem_haltTiles_top tm t h_t_mem with
           ⟨_, rfl⟩
         | rfl
         | ⟨_, _, _, _, _, rfl⟩
@@ -2094,20 +2094,20 @@ must be `sepTile`. -/
 private lemma sep_forced (tm : SingleTapeTM Symbol)
     (rest : List (Alpha tm.State Symbol))
     (A : Stack (Alpha tm.State Symbol))
-    (h_mem : ∀ s ∈ A, s ∈ luTiles tm)
+    (h_mem : ∀ s ∈ A, s ∈ haltTiles tm)
     (h_eq : tau1 A = # :: rest) :
     ∃ A' : Stack (Alpha tm.State Symbol),
       A = sepTile tm :: A' ∧
       tau1 A' = rest ∧
-      (∀ s ∈ A', s ∈ luTiles tm) := by
+      (∀ s ∈ A', s ∈ haltTiles tm) := by
   cases A with
   | nil => simp at h_eq
   | cons t A_rest =>
-    have h_t_mem : t ∈ luTiles tm := h_mem t (List.mem_cons_self ..)
-    have h_rest_mem : ∀ s ∈ A_rest, s ∈ luTiles tm :=
+    have h_t_mem : t ∈ haltTiles tm := h_mem t (List.mem_cons_self ..)
+    have h_rest_mem : ∀ s ∈ A_rest, s ∈ haltTiles tm :=
       fun s hs => h_mem s (List.mem_cons_of_mem t hs)
     rw [tau1_cons] at h_eq
-    rcases mem_luTiles_top tm t h_t_mem with
+    rcases mem_haltTiles_top tm t h_t_mem with
         ⟨_, rfl⟩
       | rfl
       | ⟨_, _, _, _, _, rfl⟩
@@ -2142,9 +2142,9 @@ private lemma sep_forced (tm : SingleTapeTM Symbol)
 
 The strong-hypothesis forcing lemmas above (`copy_prefix_forced`,
 `transition_forced`, `copy_prefix_forced_state_lead`, `sep_forced`)
-require `∀ s ∈ A, s ∈ luTiles tm`. The canonical
+require `∀ s ∈ A, s ∈ haltTiles tm`. The canonical
 `Halts ↔ MHasSolution` iff begins with `A` drawn from
-`startTile :: luTiles tm`, so we need _weak_ variants that admit
+`startTile :: haltTiles tm`, so we need _weak_ variants that admit
 `startTile` in `A`. For the prefix / transition / state-lead lemmas,
 `startTile.top = [#]` is ruled out by the lookahead's first character
 (`↟ₜ_` or `↟ₛq`). At the sep position the lookahead's first character
@@ -2153,21 +2153,21 @@ of `sep_forced_weak` is therefore a disjunction that distinguishes
 the two cases by the residual's `tau2`. -/
 
 /-- Weak variant of `copy_prefix_forced`. Identical to the strong version
-except `A`'s tiles may be drawn from `startTile :: luTiles tm`; the
+except `A`'s tiles may be drawn from `startTile :: haltTiles tm`; the
 `startTile.top = [#]` case is ruled out by character mismatch with
 `liftTape tm (a :: L)`'s leading `↟ₜa`. -/
 private lemma copy_prefix_forced_weak (tm : SingleTapeTM Symbol)
     (w_in : List Symbol) :
     ∀ (L : List (Option Symbol)) (A : Stack (Alpha tm.State Symbol))
       (tail : List (Alpha tm.State Symbol)),
-      (∀ t ∈ A, t ∈ startTile tm w_in :: luTiles tm) →
+      (∀ t ∈ A, t ∈ startTile tm w_in :: haltTiles tm) →
       tau1 A = liftTape tm L ++ tail →
       (∀ x : List (Alpha tm.State Symbol), tail ≠ h⊥ :: x) →
       (∀ (q : tm.State) (x : List (Alpha tm.State Symbol)),
           tail ≠ ↟ₛq :: x) →
       ∃ A' : Stack (Alpha tm.State Symbol),
           A = L.map (copyTile tm) ++ A' ∧
-          (∀ t ∈ A', t ∈ startTile tm w_in :: luTiles tm) ∧
+          (∀ t ∈ A', t ∈ startTile tm w_in :: haltTiles tm) ∧
           tau1 A' = tail ∧
           tau2 A = liftTape tm L ++ tau2 A' := by
   intro L
@@ -2180,9 +2180,9 @@ private lemma copy_prefix_forced_weak (tm : SingleTapeTM Symbol)
     cases A with
     | nil => simp [liftTape_cons] at h_eq
     | cons t A_rest =>
-      have h_t_in : t ∈ startTile tm w_in :: luTiles tm :=
+      have h_t_in : t ∈ startTile tm w_in :: haltTiles tm :=
         h_mem t (List.mem_cons_self ..)
-      have h_rest_in : ∀ s ∈ A_rest, s ∈ startTile tm w_in :: luTiles tm :=
+      have h_rest_in : ∀ s ∈ A_rest, s ∈ startTile tm w_in :: haltTiles tm :=
         fun s hs => h_mem s (List.mem_cons_of_mem t hs)
       rw [tau1_cons, liftTape_cons, List.cons_append] at h_eq
       rcases List.mem_cons.mp h_t_in with rfl | h_t_lu
@@ -2190,7 +2190,7 @@ private lemma copy_prefix_forced_weak (tm : SingleTapeTM Symbol)
         simp only [startTile_top, List.cons_append, List.nil_append] at h_eq
         injection h_eq with h_h _
         cases h_h
-      · rcases mem_luTiles_top tm t h_t_lu with
+      · rcases mem_haltTiles_top tm t h_t_lu with
             ⟨a', rfl⟩
           | rfl
           | ⟨_, _, _, _, _, rfl⟩
@@ -2243,19 +2243,19 @@ private lemma transition_forced_weak (tm : SingleTapeTM Symbol)
     (q : tm.State) (a : Option Symbol)
     (rest : List (Alpha tm.State Symbol))
     (A : Stack (Alpha tm.State Symbol))
-    (h_mem : ∀ t ∈ A, t ∈ startTile tm w_in :: luTiles tm)
+    (h_mem : ∀ t ∈ A, t ∈ startTile tm w_in :: haltTiles tm)
     (h_eq : tau1 A = ↟ₛq :: ↟ₜa :: rest) :
     ∃ (tile : Tile (Alpha tm.State Symbol))
       (A' : Stack (Alpha tm.State Symbol)),
       A = tile :: A' ∧
       tile ∈ transitionTilesFor tm q a ∧
-      (∀ s ∈ A', s ∈ startTile tm w_in :: luTiles tm) := by
+      (∀ s ∈ A', s ∈ startTile tm w_in :: haltTiles tm) := by
   cases A with
   | nil => simp at h_eq
   | cons t A_rest =>
-    have h_t_in : t ∈ startTile tm w_in :: luTiles tm :=
+    have h_t_in : t ∈ startTile tm w_in :: haltTiles tm :=
       h_mem t (List.mem_cons_self ..)
-    have h_rest_in : ∀ s ∈ A_rest, s ∈ startTile tm w_in :: luTiles tm :=
+    have h_rest_in : ∀ s ∈ A_rest, s ∈ startTile tm w_in :: haltTiles tm :=
       fun s hs => h_mem s (List.mem_cons_of_mem t hs)
     refine ⟨t, A_rest, rfl, ?_, h_rest_in⟩
     rw [tau1_cons] at h_eq
@@ -2264,7 +2264,7 @@ private lemma transition_forced_weak (tm : SingleTapeTM Symbol)
       simp only [startTile_top, List.cons_append, List.nil_append] at h_eq
       injection h_eq with h_h _
       cases h_h
-    · rcases mem_luTiles_top tm t h_t_lu with
+    · rcases mem_haltTiles_top tm t h_t_lu with
           ⟨_, rfl⟩
         | rfl
         | ⟨q', a', qNew, w, h_tr, rfl⟩
@@ -2332,11 +2332,11 @@ private lemma copy_prefix_forced_state_lead_weak (tm : SingleTapeTM Symbol)
         tm.tr q a ≠ (⟨w, some Dir.left⟩, qNew)) :
     ∀ (L : List (Option Symbol)) (A : Stack (Alpha tm.State Symbol))
       (rest : List (Alpha tm.State Symbol)),
-      (∀ s ∈ A, s ∈ startTile tm w_in :: luTiles tm) →
+      (∀ s ∈ A, s ∈ startTile tm w_in :: haltTiles tm) →
       tau1 A = liftTape tm L ++ ↟ₛq :: ↟ₜa :: rest →
       ∃ A' : Stack (Alpha tm.State Symbol),
           A = L.map (copyTile tm) ++ A' ∧
-          (∀ s ∈ A', s ∈ startTile tm w_in :: luTiles tm) ∧
+          (∀ s ∈ A', s ∈ startTile tm w_in :: haltTiles tm) ∧
           tau1 A' = ↟ₛq :: ↟ₜa :: rest ∧
           tau2 A = liftTape tm L ++ tau2 A' := by
   intro L
@@ -2349,9 +2349,9 @@ private lemma copy_prefix_forced_state_lead_weak (tm : SingleTapeTM Symbol)
     cases A with
     | nil => simp [liftTape_cons] at h_eq
     | cons t A_rest =>
-      have h_t_in : t ∈ startTile tm w_in :: luTiles tm :=
+      have h_t_in : t ∈ startTile tm w_in :: haltTiles tm :=
         h_mem t (List.mem_cons_self ..)
-      have h_rest_in : ∀ s ∈ A_rest, s ∈ startTile tm w_in :: luTiles tm :=
+      have h_rest_in : ∀ s ∈ A_rest, s ∈ startTile tm w_in :: haltTiles tm :=
         fun s hs => h_mem s (List.mem_cons_of_mem t hs)
       rw [tau1_cons, liftTape_cons, List.cons_append] at h_eq
       rcases List.mem_cons.mp h_t_in with rfl | h_t_lu
@@ -2359,7 +2359,7 @@ private lemma copy_prefix_forced_state_lead_weak (tm : SingleTapeTM Symbol)
         simp only [startTile_top, List.cons_append, List.nil_append] at h_eq
         injection h_eq with h_h _
         cases h_h
-      · rcases mem_luTiles_top tm t h_t_lu with
+      · rcases mem_haltTiles_top tm t h_t_lu with
             ⟨_, rfl⟩
           | rfl
           | ⟨_, _, _, _, _, rfl⟩
@@ -2412,14 +2412,14 @@ private lemma copy_prefix_forced_state_lead_weak (tm : SingleTapeTM Symbol)
         · simp at h_eq
 
 /-- Weak variant of `sep_forced`: when `tau1 A` starts with `#` and
-every tile of `A` lies in `startTile :: luTiles tm`, the head tile is
+every tile of `A` lies in `startTile :: haltTiles tm`, the head tile is
 either `sepTile` or `startTile`. The two cases differ in the value of
 `tau2 A`: the `sepTile` case contributes `[#]`, while the `startTile`
 case contributes `# :: encodeCfg(initCfg) ++ [#]`. -/
 private lemma sep_forced_weak (tm : SingleTapeTM Symbol) (w_in : List Symbol)
     (rest : List (Alpha tm.State Symbol))
     (A : Stack (Alpha tm.State Symbol))
-    (h_mem : ∀ s ∈ A, s ∈ startTile tm w_in :: luTiles tm)
+    (h_mem : ∀ s ∈ A, s ∈ startTile tm w_in :: haltTiles tm)
     (h_eq : tau1 A = # :: rest) :
     ∃ A' : Stack (Alpha tm.State Symbol),
       ((A = sepTile tm :: A' ∧
@@ -2427,13 +2427,13 @@ private lemma sep_forced_weak (tm : SingleTapeTM Symbol) (w_in : List Symbol)
        (A = startTile tm w_in :: A' ∧
         tau2 A = # :: encodeCfg tm (SingleTapeTM.initCfg tm w_in) ++ [#] ++ tau2 A')) ∧
       tau1 A' = rest ∧
-      (∀ s ∈ A', s ∈ startTile tm w_in :: luTiles tm) := by
+      (∀ s ∈ A', s ∈ startTile tm w_in :: haltTiles tm) := by
   cases A with
   | nil => simp at h_eq
   | cons t A_rest =>
-    have h_t_in : t ∈ startTile tm w_in :: luTiles tm :=
+    have h_t_in : t ∈ startTile tm w_in :: haltTiles tm :=
       h_mem t (List.mem_cons_self ..)
-    have h_rest_in : ∀ s ∈ A_rest, s ∈ startTile tm w_in :: luTiles tm :=
+    have h_rest_in : ∀ s ∈ A_rest, s ∈ startTile tm w_in :: haltTiles tm :=
       fun s hs => h_mem s (List.mem_cons_of_mem t hs)
     rw [tau1_cons] at h_eq
     rcases List.mem_cons.mp h_t_in with rfl | h_t_lu
@@ -2442,8 +2442,8 @@ private lemma sep_forced_weak (tm : SingleTapeTM Symbol) (w_in : List Symbol)
       injection h_eq with _ h_tail
       refine ⟨A_rest, Or.inr ⟨rfl, ?_⟩, h_tail, h_rest_in⟩
       simp [tau2_cons, startTile_bot, List.append_assoc]
-    · -- t ∈ luTiles: only sepTile matches; rule out the other 7.
-      rcases mem_luTiles_top tm t h_t_lu with
+    · -- t ∈ haltTiles: only sepTile matches; rule out the other 7.
+      rcases mem_haltTiles_top tm t h_t_lu with
           ⟨_, rfl⟩
         | rfl
         | ⟨_, _, _, _, _, rfl⟩
@@ -2482,11 +2482,11 @@ private lemma starts_with_stepTilesNoMove (tm : SingleTapeTM Symbol)
     (qNew : Option tm.State) (w : Option Symbol)
     (htr : tm.tr q t.head = (⟨w, none⟩, qNew))
     (A : Stack (Alpha tm.State Symbol))
-    (h_mem : ∀ s ∈ A, s ∈ luTiles tm)
+    (h_mem : ∀ s ∈ A, s ∈ haltTiles tm)
     (h_eq : tau1 A = encodeRunningCfg tm q t ++ [#] ++ tau2 A) :
     ∃ A' : Stack (Alpha tm.State Symbol),
         A = stepTilesNoMove tm q qNew t w ++ A' ∧
-        (∀ s ∈ A', s ∈ luTiles tm) ∧
+        (∀ s ∈ A', s ∈ haltTiles tm) ∧
         tau1 A' = encodeCfg tm ⟨qNew, t.write w⟩ ++ [#] ++ tau2 A' := by
   have h_not_left : ∀ (qN : Option tm.State) (w' : Option Symbol),
       tm.tr q t.head ≠ (⟨w', some Dir.left⟩, qN) := by
@@ -2546,11 +2546,11 @@ private lemma starts_with_stepTilesRightInterior (tm : SingleTapeTM Symbol)
     (h_right_ne : t.right.toList ≠ [])
     (h_nondeg : w ≠ none ∨ t.left.toList ≠ [])
     (A : Stack (Alpha tm.State Symbol))
-    (h_mem : ∀ s ∈ A, s ∈ luTiles tm)
+    (h_mem : ∀ s ∈ A, s ∈ haltTiles tm)
     (h_eq : tau1 A = encodeRunningCfg tm q t ++ [#] ++ tau2 A) :
     ∃ A' : Stack (Alpha tm.State Symbol),
         A = stepTilesRightInterior tm q qNew t w ++ A' ∧
-        (∀ s ∈ A', s ∈ luTiles tm) ∧
+        (∀ s ∈ A', s ∈ haltTiles tm) ∧
         tau1 A' = encodeCfg tm ⟨qNew, (t.write w).move_right⟩ ++ [#] ++ tau2 A' := by
   have h_not_left : ∀ (qN : Option tm.State) (w' : Option Symbol),
       tm.tr q t.head ≠ (⟨w', some Dir.left⟩, qN) := by
@@ -2625,24 +2625,24 @@ interior case: `rightMoveTile` (top length 2) and `rightMoveBoundaryTile`
 `[↟ₛq, ↟ₜt.head, #, …]` when `t.right = []`. The helper below proves
 that under the non-halting hypothesis `qNew = some _`, the alternative
 forces a residual lookahead containing `↟ₛqNew_q :: # :: …`, which no
-`luTiles` tile can consume — every transition tile's second character
+`haltTiles` tile can consume — every transition tile's second character
 is a tape lift, never `#`. -/
 
 /-- If `tau1 A` begins `↟ₛq :: # :: …` (state marker immediately
-followed by the separator), no tile of `luTiles` can be the head of
+followed by the separator), no tile of `haltTiles` can be the head of
 `A`. -/
 private lemma no_tile_for_state_sharp (tm : SingleTapeTM Symbol) (q : tm.State)
     (rest : List (Alpha tm.State Symbol))
     (A : Stack (Alpha tm.State Symbol))
-    (h_mem : ∀ s ∈ A, s ∈ luTiles tm)
+    (h_mem : ∀ s ∈ A, s ∈ haltTiles tm)
     (h_eq : tau1 A = ↟ₛq :: # :: rest) :
     False := by
   cases A with
   | nil => simp at h_eq
   | cons t A_rest =>
-    have h_t_mem : t ∈ luTiles tm := h_mem t (List.mem_cons_self ..)
+    have h_t_mem : t ∈ haltTiles tm := h_mem t (List.mem_cons_self ..)
     rw [tau1_cons] at h_eq
-    rcases mem_luTiles_top tm t h_t_mem with
+    rcases mem_haltTiles_top tm t h_t_mem with
         ⟨_, rfl⟩
       | rfl
       | ⟨_, _, _, _, _, rfl⟩
@@ -2670,11 +2670,11 @@ private lemma starts_with_stepTilesRightBoundary (tm : SingleTapeTM Symbol)
     (h_right_empty : t.right.toList = [])
     (h_nondeg : w ≠ none ∨ t.left.toList ≠ [])
     (A : Stack (Alpha tm.State Symbol))
-    (h_mem : ∀ s ∈ A, s ∈ luTiles tm)
+    (h_mem : ∀ s ∈ A, s ∈ haltTiles tm)
     (h_eq : tau1 A = encodeRunningCfg tm q t ++ [#] ++ tau2 A) :
     ∃ A' : Stack (Alpha tm.State Symbol),
         A = stepTilesRightBoundary tm q (some qNew_q) t w ++ A' ∧
-        (∀ s ∈ A', s ∈ luTiles tm) ∧
+        (∀ s ∈ A', s ∈ haltTiles tm) ∧
         tau1 A' = encodeCfg tm ⟨some qNew_q, (t.write w).move_right⟩
                     ++ [#] ++ tau2 A' := by
   have h_not_left : ∀ (qN : Option tm.State) (w' : Option Symbol),
@@ -2721,11 +2721,11 @@ private lemma starts_with_stepTilesRightBoundary (tm : SingleTapeTM Symbol)
     cases A4 with
     | nil => simp at hA4_tau1
     | cons t4 A4_rest =>
-      have h_t4_mem : t4 ∈ luTiles tm := hA4_mem t4 (List.mem_cons_self ..)
-      have h_t4_rest_mem : ∀ s ∈ A4_rest, s ∈ luTiles tm :=
+      have h_t4_mem : t4 ∈ haltTiles tm := hA4_mem t4 (List.mem_cons_self ..)
+      have h_t4_rest_mem : ∀ s ∈ A4_rest, s ∈ haltTiles tm :=
         fun s hs => hA4_mem s (List.mem_cons_of_mem t4 hs)
       rw [tau1_cons] at hA4_tau1
-      rcases mem_luTiles_top tm t4 h_t4_mem with
+      rcases mem_haltTiles_top tm t4 h_t4_mem with
           ⟨_, rfl⟩
         | rfl
         | ⟨_, _, _, _, _, rfl⟩
@@ -2775,7 +2775,7 @@ private lemma starts_with_stepTilesRightBoundary (tm : SingleTapeTM Symbol)
 
 /-! ## Step 4: backward step for left-move in the interior
 
-Under the HUM refactor (no `leftMoveBoundaryTile` in `luTiles`) the
+Under the HUM refactor (no `leftMoveBoundaryTile` in `haltTiles`) the
 left-interior case is no longer ambiguous: after stripping the
 `bs.reverse` copies (where `bs = t.left.tail`), the only tile that
 can match the lookahead `[↟ₜb, ↟ₛq, ↟ₜt.head, …]` is
@@ -2796,11 +2796,11 @@ private lemma starts_with_stepTilesLeftInterior (tm : SingleTapeTM Symbol)
     (h_left_ne : t.left.toList ≠ [])
     (h_nondeg : w ≠ none ∨ t.right.toList ≠ [])
     (A : Stack (Alpha tm.State Symbol))
-    (h_mem : ∀ s ∈ A, s ∈ luTiles tm)
+    (h_mem : ∀ s ∈ A, s ∈ haltTiles tm)
     (h_eq : tau1 A = encodeRunningCfg tm q t ++ [#] ++ tau2 A) :
     ∃ A' : Stack (Alpha tm.State Symbol),
         A = stepTilesLeftInterior tm q qNew t w ++ A' ∧
-        (∀ s ∈ A', s ∈ luTiles tm) ∧
+        (∀ s ∈ A', s ∈ haltTiles tm) ∧
         tau1 A' = encodeCfg tm ⟨qNew, (t.write w).move_left⟩
                     ++ [#] ++ tau2 A' := by
   -- Reshape the lookahead: peel off the innermost left-tape symbol.
@@ -2827,11 +2827,11 @@ private lemma starts_with_stepTilesLeftInterior (tm : SingleTapeTM Symbol)
   cases A1 with
   | nil => simp at hA_tau1
   | cons t1 A1_rest =>
-    have h_t1_mem : t1 ∈ luTiles tm := hA_mem t1 (List.mem_cons_self ..)
-    have h_a1_rest_mem : ∀ s ∈ A1_rest, s ∈ luTiles tm :=
+    have h_t1_mem : t1 ∈ haltTiles tm := hA_mem t1 (List.mem_cons_self ..)
+    have h_a1_rest_mem : ∀ s ∈ A1_rest, s ∈ haltTiles tm :=
       fun s hs => hA_mem s (List.mem_cons_of_mem t1 hs)
     rw [tau1_cons] at hA_tau1
-    rcases mem_luTiles_top tm t1 h_t1_mem with
+    rcases mem_haltTiles_top tm t1 h_t1_mem with
         ⟨_, rfl⟩
       | rfl
       | ⟨_, _, _, _, _, rfl⟩
@@ -2972,12 +2972,12 @@ private lemma starts_with_stepTilesNoMove_weak_ext (tm : SingleTapeTM Symbol)
     (htr : tm.tr q t.head = (⟨w, none⟩, qNew))
     (rest_cfgs : List tm.Cfg)
     (A : Stack (Alpha tm.State Symbol))
-    (h_mem : ∀ s ∈ A, s ∈ startTile tm w_in :: luTiles tm)
+    (h_mem : ∀ s ∈ A, s ∈ startTile tm w_in :: haltTiles tm)
     (h_eq : tau1 A = encodeRunningCfg tm q t ++ [#] ++
               queueEncoding tm rest_cfgs ++ tau2 A) :
     ∃ A' : Stack (Alpha tm.State Symbol),
         A'.length < A.length ∧
-        (∀ s ∈ A', s ∈ startTile tm w_in :: luTiles tm) ∧
+        (∀ s ∈ A', s ∈ startTile tm w_in :: haltTiles tm) ∧
         ((tau1 A' = queueEncoding tm
             (rest_cfgs ++ [⟨qNew, t.write w⟩]) ++ tau2 A') ∨
          (tau1 A' = queueEncoding tm
@@ -3060,12 +3060,12 @@ private lemma starts_with_stepTilesRightInterior_weak_ext (tm : SingleTapeTM Sym
     (h_nondeg : w ≠ none ∨ t.left.toList ≠ [])
     (rest_cfgs : List tm.Cfg)
     (A : Stack (Alpha tm.State Symbol))
-    (h_mem : ∀ s ∈ A, s ∈ startTile tm w_in :: luTiles tm)
+    (h_mem : ∀ s ∈ A, s ∈ startTile tm w_in :: haltTiles tm)
     (h_eq : tau1 A = encodeRunningCfg tm q t ++ [#] ++
               queueEncoding tm rest_cfgs ++ tau2 A) :
     ∃ A' : Stack (Alpha tm.State Symbol),
         A'.length < A.length ∧
-        (∀ s ∈ A', s ∈ startTile tm w_in :: luTiles tm) ∧
+        (∀ s ∈ A', s ∈ startTile tm w_in :: haltTiles tm) ∧
         ((tau1 A' = queueEncoding tm
             (rest_cfgs ++ [⟨qNew, (t.write w).move_right⟩]) ++ tau2 A') ∨
          (tau1 A' = queueEncoding tm
@@ -3155,7 +3155,7 @@ private lemma tau1_no_state_marker_then_sharp
     (tm : SingleTapeTM Symbol) (w_in : List Symbol) (q : tm.State) :
     ∀ (A : Stack (Alpha tm.State Symbol))
        (l1 l2 : List (Alpha tm.State Symbol)),
-      (∀ s ∈ A, s ∈ startTile tm w_in :: luTiles tm) →
+      (∀ s ∈ A, s ∈ startTile tm w_in :: haltTiles tm) →
       tau1 A = l1 ++ ↟ₛq :: # :: l2 → False := by
   intro A
   induction A with
@@ -3165,9 +3165,9 @@ private lemma tau1_no_state_marker_then_sharp
     cases l1 <;> simp at h
   | cons t A_rest ih =>
     intro l1 l2 h_mem h_eq
-    have h_t_in : t ∈ startTile tm w_in :: luTiles tm :=
+    have h_t_in : t ∈ startTile tm w_in :: haltTiles tm :=
       h_mem t (List.mem_cons_self ..)
-    have h_rest_in : ∀ s ∈ A_rest, s ∈ startTile tm w_in :: luTiles tm :=
+    have h_rest_in : ∀ s ∈ A_rest, s ∈ startTile tm w_in :: haltTiles tm :=
       fun s hs => h_mem s (List.mem_cons_of_mem t hs)
     rw [tau1_cons] at h_eq
     rcases List.mem_cons.mp h_t_in with rfl | h_t_lu
@@ -3179,7 +3179,7 @@ private lemma tau1_no_state_marker_then_sharp
         simp only [List.cons_append] at h_eq
         injection h_eq with _ h_tail
         exact ih l1' l2 h_rest_in h_tail
-    · rcases mem_luTiles_top tm t h_t_lu with
+    · rcases mem_haltTiles_top tm t h_t_lu with
           ⟨a, rfl⟩
         | rfl
         | ⟨q', a, _, _, _, rfl⟩
@@ -3328,12 +3328,12 @@ private lemma starts_with_stepTilesRightBoundary_weak_ext (tm : SingleTapeTM Sym
     (h_nondeg : w ≠ none ∨ t.left.toList ≠ [])
     (rest_cfgs : List tm.Cfg)
     (A : Stack (Alpha tm.State Symbol))
-    (h_mem : ∀ s ∈ A, s ∈ startTile tm w_in :: luTiles tm)
+    (h_mem : ∀ s ∈ A, s ∈ startTile tm w_in :: haltTiles tm)
     (h_eq : tau1 A = encodeRunningCfg tm q t ++ [#] ++
               queueEncoding tm rest_cfgs ++ tau2 A) :
     ∃ A' : Stack (Alpha tm.State Symbol),
         A'.length < A.length ∧
-        (∀ s ∈ A', s ∈ startTile tm w_in :: luTiles tm) ∧
+        (∀ s ∈ A', s ∈ startTile tm w_in :: haltTiles tm) ∧
         tau1 A' = queueEncoding tm
             (rest_cfgs ++ [⟨some qNew_q, (t.write w).move_right⟩]) ++ tau2 A' := by
   have h_not_left : ∀ (qN : Option tm.State) (w' : Option Symbol),
@@ -3416,12 +3416,12 @@ private lemma starts_with_stepTilesLeftInterior_weak_ext (tm : SingleTapeTM Symb
     (h_nondeg : w ≠ none ∨ t.right.toList ≠ [])
     (rest_cfgs : List tm.Cfg)
     (A : Stack (Alpha tm.State Symbol))
-    (h_mem : ∀ s ∈ A, s ∈ startTile tm w_in :: luTiles tm)
+    (h_mem : ∀ s ∈ A, s ∈ startTile tm w_in :: haltTiles tm)
     (h_eq : tau1 A = encodeRunningCfg tm q t ++ [#] ++
               queueEncoding tm rest_cfgs ++ tau2 A) :
     ∃ A' : Stack (Alpha tm.State Symbol),
         A'.length < A.length ∧
-        (∀ s ∈ A', s ∈ startTile tm w_in :: luTiles tm) ∧
+        (∀ s ∈ A', s ∈ startTile tm w_in :: haltTiles tm) ∧
         ((tau1 A' = queueEncoding tm
             (rest_cfgs ++ [⟨qNew, (t.write w).move_left⟩]) ++ tau2 A') ∨
          (tau1 A' = queueEncoding tm
@@ -3449,15 +3449,15 @@ private lemma starts_with_stepTilesLeftInterior_weak_ext (tm : SingleTapeTM Symb
   cases A1 with
   | nil => simp at hA_tau1
   | cons t1 A1_rest =>
-    have h_t1_in : t1 ∈ startTile tm w_in :: luTiles tm :=
+    have h_t1_in : t1 ∈ startTile tm w_in :: haltTiles tm :=
       hA_mem t1 (List.mem_cons_self ..)
-    have h_a1_rest_in : ∀ s ∈ A1_rest, s ∈ startTile tm w_in :: luTiles tm :=
+    have h_a1_rest_in : ∀ s ∈ A1_rest, s ∈ startTile tm w_in :: haltTiles tm :=
       fun s hs => hA_mem s (List.mem_cons_of_mem t1 hs)
     rw [tau1_cons] at hA_tau1
     rcases List.mem_cons.mp h_t1_in with rfl | h_t1_lu
     · simp only [startTile_top, List.cons_append, List.nil_append] at hA_tau1
       injection hA_tau1 with h _; cases h
-    · rcases mem_luTiles_top tm t1 h_t1_lu with
+    · rcases mem_haltTiles_top tm t1 h_t1_lu with
           ⟨_, rfl⟩
         | rfl
         | ⟨_, _, _, _, _, rfl⟩
@@ -3551,7 +3551,7 @@ private lemma starts_with_stepTilesLeftInterior_weak_ext (tm : SingleTapeTM Symb
 /-! ## Step 6: `backward_aux` — main strong induction
 
 The main strong-induction lemma for the backward direction. Given a stack
-`A` whose tiles are drawn from `luTiles tm` and which carries the matching
+`A` whose tiles are drawn from `haltTiles tm` and which carries the matching
 invariant `tau1 A = encodeCfg tm cfg ++ [#] ++ tau2 A`, produce a halting
 trace `cfg →* ⟨none, tape⟩`.
 
@@ -3576,7 +3576,7 @@ private lemma backward_aux (tm : SingleTapeTM Symbol)
       A.length ≤ n →
       Relation.ReflTransGen tm.TransitionRelation
           (SingleTapeTM.initCfg tm w_in) cfg →
-      (∀ s ∈ A, s ∈ luTiles tm) →
+      (∀ s ∈ A, s ∈ haltTiles tm) →
       tau1 A = encodeCfg tm cfg ++ [#] ++ tau2 A →
       ∃ tape : BiTape Symbol,
         Relation.ReflTransGen tm.TransitionRelation cfg
@@ -3731,11 +3731,11 @@ private lemma backward_aux (tm : SingleTapeTM Symbol)
                 ih A' (stepResult tm q tape) hA'_len h_reach' hA'_mem hA'_match'
               exact ⟨tape_h, .head (tm_step_running tm q tape) h_h⟩
 
-/-! ## Step 7: `lu_le_mpcp_strong` — the equivalence (strong-A form)
+/-! ## Step 7: `halt_le_mpcp_strong` — the equivalence (strong-A form)
 
-The reduction `Lu ≤_m MPCP` packaged as an `Iff` using a strengthened
-formulation: solutions are drawn from `luTiles tm` alone (rather than
-`startTile :: luTiles tm`). The forward direction uses the existing
+The reduction `Halt ≤_m MPCP` packaged as an `Iff` using a strengthened
+formulation: solutions are drawn from `haltTiles tm` alone (rather than
+`startTile :: haltTiles tm`). The forward direction uses the existing
 `forward_aux`; the backward direction re-packages `backward_aux` after
 cancelling the leading `#` separator.
 
@@ -3743,20 +3743,20 @@ Both directions assume `NoBlankWrites tm` and `NoLeftBoundary tm w`, the
 two HUM side conditions described in `Basic.lean`.
 
 The fully general statement `Halts tm w ↔ MHasSolution …` (which allows
-solutions to include the start tile mid-stream) is `lu_le_mpcp` below,
+solutions to include the start tile mid-stream) is `halt_le_mpcp` below,
 established via `backward_aux_weak` with a chain-tracked cfg queue. -/
 
-/-- **`Lu ≤_m MPCP`** (strong-A form, auxiliary): `Halts tm w` is
+/-- **`Halt ≤_m MPCP`** (strong-A form, auxiliary): `Halts tm w` is
 equivalent to the existence of a stack `A` whose tiles all belong to
-`luTiles tm` (no use of the start tile in the rest) and that satisfies
+`haltTiles tm` (no use of the start tile in the rest) and that satisfies
 the MPCP matching equation with the canonical `startTile`. The
-canonical form, using `MHasSolution` directly, is `lu_le_mpcp` below. -/
-theorem lu_le_mpcp_strong (tm : SingleTapeTM Symbol)
+canonical form, using `MHasSolution` directly, is `halt_le_mpcp` below. -/
+theorem halt_le_mpcp_strong (tm : SingleTapeTM Symbol)
     (h_nbw : NoBlankWrites tm) (w : List Symbol)
     (h_nlb : NoLeftBoundary tm w) :
     Halts tm w ↔
     ∃ A : Stack (Alpha tm.State Symbol),
-      (∀ t ∈ A, t ∈ luTiles tm) ∧
+      (∀ t ∈ A, t ∈ haltTiles tm) ∧
       [#] ++ tau1 A = # :: encodeCfg tm (SingleTapeTM.initCfg tm w) ++ [#] ++ tau2 A := by
   constructor
   · -- Forward: extract from `Halts` a halting trace, then construct A.
@@ -3793,18 +3793,18 @@ theorem lu_le_mpcp_strong (tm : SingleTapeTM Symbol)
 
 /-- The forward direction of the canonical `Halts ↔ MHasSolution` iff,
 retained as a named one-direction wrapper for readability. The full
-canonical iff is `lu_le_mpcp` (below). -/
+canonical iff is `halt_le_mpcp` (below). -/
 theorem halts_iff_mhasSolution_forward (tm : SingleTapeTM Symbol)
     (h_nbw : NoBlankWrites tm) (w : List Symbol)
     (h_nlb : NoLeftBoundary tm w) :
-    Halts tm w → MHasSolution (startTile tm w) (luTiles tm) :=
+    Halts tm w → MHasSolution (startTile tm w) (haltTiles tm) :=
   halts_implies_mhasSolution tm h_nbw w h_nlb
 
 /-! ## Step 6 (canonical): `backward_aux_weak` — strong induction with
 chain-tracked queue
 
 Generalises `backward_aux` to admit `A` drawn from
-`startTile :: luTiles tm`. The matching invariant carries a `queue` of
+`startTile :: haltTiles tm`. The matching invariant carries a `queue` of
 cfgs whose encodings appear in `tau1 A` (concatenated via
 `queueEncoding`). The `chains` parameter associates each cfg in the
 queue with a reachability proof from `initCfg`. At each iteration we
@@ -3823,7 +3823,7 @@ private lemma backward_aux_weak (tm : SingleTapeTM Symbol)
           (SingleTapeTM.initCfg tm w_in) c),
       A.length ≤ n →
       queue ≠ [] →
-      (∀ s ∈ A, s ∈ startTile tm w_in :: luTiles tm) →
+      (∀ s ∈ A, s ∈ startTile tm w_in :: haltTiles tm) →
       tau1 A = queueEncoding tm queue ++ tau2 A →
       ∃ tape : BiTape Symbol,
         Relation.ReflTransGen tm.TransitionRelation
@@ -4036,7 +4036,7 @@ for the encoded TM-halting instance, recover `Halts tm w`. Initialises
 theorem mhasSolution_implies_halts (tm : SingleTapeTM Symbol)
     (h_nbw : NoBlankWrites tm) (w : List Symbol)
     (h_nlb : NoLeftBoundary tm w)
-    (h : MHasSolution (startTile tm w) (luTiles tm)) :
+    (h : MHasSolution (startTile tm w) (haltTiles tm)) :
     Halts tm w := by
   obtain ⟨A, h_mem, h_match⟩ := h
   -- Cancel leading `[#]` from the MHasSolution matching equation.
@@ -4068,23 +4068,23 @@ theorem mhasSolution_implies_halts (tm : SingleTapeTM Symbol)
     h_mem
     h_match_queue
 
-/-- **Canonical `Lu ≤_m MPCP` iff**. The forward direction is
+/-- **Canonical `Halt ≤_m MPCP` iff**. The forward direction is
 `halts_implies_mhasSolution`; the backward direction is the new
 `mhasSolution_implies_halts` (which threads a chain-tracked cfg queue
 through `backward_aux_weak`). -/
-theorem lu_le_mpcp (tm : SingleTapeTM Symbol)
+theorem halt_le_mpcp (tm : SingleTapeTM Symbol)
     (h_nbw : NoBlankWrites tm) (w : List Symbol)
     (h_nlb : NoLeftBoundary tm w) :
-    Halts tm w ↔ MHasSolution (startTile tm w) (luTiles tm) :=
+    Halts tm w ↔ MHasSolution (startTile tm w) (haltTiles tm) :=
   ⟨halts_implies_mhasSolution tm h_nbw w h_nlb,
    mhasSolution_implies_halts tm h_nbw w h_nlb⟩
 
 /-- Alias retained for the older name. -/
-@[deprecated lu_le_mpcp (since := "2026-05-14")]
+@[deprecated halt_le_mpcp (since := "2026-05-14")]
 theorem halts_iff_mhasSolution (tm : SingleTapeTM Symbol)
     (h_nbw : NoBlankWrites tm) (w : List Symbol)
     (h_nlb : NoLeftBoundary tm w) :
-    Halts tm w ↔ MHasSolution (startTile tm w) (luTiles tm) :=
-  lu_le_mpcp tm h_nbw w h_nlb
+    Halts tm w ↔ MHasSolution (startTile tm w) (haltTiles tm) :=
+  halt_le_mpcp tm h_nbw w h_nlb
 
-end PCP.LuToMPCP
+end PCP.HaltToMPCP
