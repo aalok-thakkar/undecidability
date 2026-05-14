@@ -3764,14 +3764,268 @@ private lemma starts_with_stepTilesRightInterior_weak_ext (tm : SingleTapeTM Sym
       injection key with h_third _
       cases h_third
 
--- NOTE: `starts_with_stepTilesRightBoundary_weak_ext` is intentionally
--- not provided. Its statement would require the same conclusion as
--- the strong version, but the alternative `rightMoveTile` path's
--- residual under non-empty `rest_cfgs` (i.e., after a startTile
--- insertion earlier) has `queueEncoding rest_cfgs` at the head of
--- `tau1 A3`, blocking the direct `no_tile_for_state_sharp_weak`
--- contradiction. Resolving this needs a queue-walking lemma — see
--- ROADMAP.md.
+/-- Structural property: `tau1 A` never contains `↟ₛq :: # :: …` as a
+sublist, for any `q`. This is because (a) within any tile's top, the
+character following `↟ₛq` is always a tape lift `↟ₜa` (never `#`), and
+(b) no tile's top ends with `↟ₛq`, so the offending substring cannot
+straddle a tile boundary. Used to discharge the alternative
+`rightMoveTile` path in `starts_with_stepTilesRightBoundary_weak_ext`
+even with non-empty `rest_cfgs`. -/
+private lemma tau1_no_state_marker_then_sharp
+    (tm : SingleTapeTM Symbol) (w_in : List Symbol) (q : tm.State) :
+    ∀ (A : Stack (Alpha tm.State Symbol))
+       (l1 l2 : List (Alpha tm.State Symbol)),
+      (∀ s ∈ A, s ∈ startTile tm w_in :: luTiles tm) →
+      tau1 A = l1 ++ ↟ₛq :: # :: l2 → False := by
+  intro A
+  induction A with
+  | nil =>
+    intro l1 l2 _ h
+    rw [tau1_nil] at h
+    cases l1 <;> simp at h
+  | cons t A_rest ih =>
+    intro l1 l2 h_mem h_eq
+    have h_t_in : t ∈ startTile tm w_in :: luTiles tm :=
+      h_mem t (List.mem_cons_self ..)
+    have h_rest_in : ∀ s ∈ A_rest, s ∈ startTile tm w_in :: luTiles tm :=
+      fun s hs => h_mem s (List.mem_cons_of_mem t hs)
+    rw [tau1_cons] at h_eq
+    rcases List.mem_cons.mp h_t_in with rfl | h_t_lu
+    · -- t = startTile, top = [#].
+      simp only [startTile_top, List.cons_append, List.nil_append] at h_eq
+      cases l1 with
+      | nil => injection h_eq with h _; cases h
+      | cons _ l1' =>
+        simp only [List.cons_append] at h_eq
+        injection h_eq with _ h_tail
+        exact ih l1' l2 h_rest_in h_tail
+    · rcases mem_luTiles_top tm t h_t_lu with
+          ⟨a, rfl⟩
+        | rfl
+        | ⟨q', a, _, _, _, rfl⟩
+        | ⟨q', a, _, _, _, rfl | rfl⟩
+        | ⟨_, _, _, _, _, b, rfl⟩
+        | ⟨a, rfl⟩
+        | ⟨a, rfl⟩
+        | rfl
+      · -- copyTile a, top = [↟ₜa] (length 1).
+        simp only [copyTile_top, List.cons_append, List.nil_append] at h_eq
+        cases l1 with
+        | nil => injection h_eq with h _; cases h
+        | cons _ l1' =>
+          simp only [List.cons_append] at h_eq
+          injection h_eq with _ h_tail
+          exact ih l1' l2 h_rest_in h_tail
+      · -- sepTile, top = [#] (length 1).
+        simp only [sepTile_top, List.cons_append, List.nil_append] at h_eq
+        cases l1 with
+        | nil => injection h_eq with h _; cases h
+        | cons _ l1' =>
+          simp only [List.cons_append] at h_eq
+          injection h_eq with _ h_tail
+          exact ih l1' l2 h_rest_in h_tail
+      · -- noMoveTile q' a _ _, top = [↟ₛq', ↟ₜa].
+        simp only [noMoveTile_top, List.cons_append, List.nil_append] at h_eq
+        cases l1 with
+        | nil =>
+          injection h_eq with _ h2
+          injection h2 with h _; cases h
+        | cons _ l1' =>
+          cases l1' with
+          | nil => injection h_eq with _ h2; injection h2 with h _; cases h
+          | cons _ l1'' =>
+            simp only [List.cons_append] at h_eq
+            injection h_eq with _ h2
+            injection h2 with _ h_tail
+            exact ih l1'' l2 h_rest_in h_tail
+      · -- rightMoveTile q' a _ _, top = [↟ₛq', ↟ₜa].
+        simp only [rightMoveTile_top, List.cons_append, List.nil_append] at h_eq
+        cases l1 with
+        | nil =>
+          injection h_eq with _ h2
+          injection h2 with h _; cases h
+        | cons _ l1' =>
+          cases l1' with
+          | nil => injection h_eq with _ h2; injection h2 with h _; cases h
+          | cons _ l1'' =>
+            simp only [List.cons_append] at h_eq
+            injection h_eq with _ h2
+            injection h2 with _ h_tail
+            exact ih l1'' l2 h_rest_in h_tail
+      · -- rightMoveBoundaryTile q' a _ _, top = [↟ₛq', ↟ₜa, #].
+        simp only [rightMoveBoundaryTile_top, List.cons_append,
+                   List.nil_append] at h_eq
+        cases l1 with
+        | nil =>
+          injection h_eq with _ h2
+          injection h2 with h _; cases h
+        | cons _ l1' =>
+          cases l1' with
+          | nil => injection h_eq with _ h2; injection h2 with h _; cases h
+          | cons _ l1'' =>
+            cases l1'' with
+            | nil => injection h_eq with _ h2; injection h2 with _ h3; injection h3 with h _; cases h
+            | cons _ l1''' =>
+              simp only [List.cons_append] at h_eq
+              injection h_eq with _ h2
+              injection h2 with _ h3
+              injection h3 with _ h_tail
+              exact ih l1''' l2 h_rest_in h_tail
+      · -- leftMoveTile q' a _ _ b, top = [↟ₜb, ↟ₛq', ↟ₜa].
+        -- At l1 = [_], the second injection gives `↟ₛq' = ↟ₛq` (same
+        -- constructor; only gives `q' = q`), so we need a third
+        -- injection to reach `↟ₜa = #`.
+        simp only [leftMoveTile_top, List.cons_append, List.nil_append] at h_eq
+        cases l1 with
+        | nil => injection h_eq with h _; cases h
+        | cons _ l1' =>
+          cases l1' with
+          | nil =>
+            injection h_eq with _ h2
+            injection h2 with _ h3
+            injection h3 with h _; cases h
+          | cons _ l1'' =>
+            cases l1'' with
+            | nil => injection h_eq with _ h2; injection h2 with _ h3; injection h3 with h _; cases h
+            | cons _ l1''' =>
+              simp only [List.cons_append] at h_eq
+              injection h_eq with _ h2
+              injection h2 with _ h3
+              injection h3 with _ h_tail
+              exact ih l1''' l2 h_rest_in h_tail
+      · -- absorbLeftTile a, top = [↟ₜa, h⊥].
+        simp only [absorbLeftTile_top, List.cons_append, List.nil_append] at h_eq
+        cases l1 with
+        | nil => injection h_eq with h _; cases h
+        | cons _ l1' =>
+          cases l1' with
+          | nil => injection h_eq with _ h2; injection h2 with h _; cases h
+          | cons _ l1'' =>
+            simp only [List.cons_append] at h_eq
+            injection h_eq with _ h2
+            injection h2 with _ h_tail
+            exact ih l1'' l2 h_rest_in h_tail
+      · -- absorbRightTile a, top = [h⊥, ↟ₜa].
+        simp only [absorbRightTile_top, List.cons_append, List.nil_append] at h_eq
+        cases l1 with
+        | nil => injection h_eq with h _; cases h
+        | cons _ l1' =>
+          cases l1' with
+          | nil => injection h_eq with _ h2; injection h2 with h _; cases h
+          | cons _ l1'' =>
+            simp only [List.cons_append] at h_eq
+            injection h_eq with _ h2
+            injection h2 with _ h_tail
+            exact ih l1'' l2 h_rest_in h_tail
+      · -- finalTile, top = [h⊥, #, #].
+        simp only [finalTile_top, List.cons_append, List.nil_append] at h_eq
+        cases l1 with
+        | nil => injection h_eq with h _; cases h
+        | cons _ l1' =>
+          cases l1' with
+          | nil => injection h_eq with _ h2; injection h2 with h _; cases h
+          | cons _ l1'' =>
+            cases l1'' with
+            | nil => injection h_eq with _ h2; injection h2 with _ h3; injection h3 with h _; cases h
+            | cons _ l1''' =>
+              simp only [List.cons_append] at h_eq
+              injection h_eq with _ h2
+              injection h2 with _ h3
+              injection h3 with _ h_tail
+              exact ih l1''' l2 h_rest_in h_tail
+
+/-- Extras-aware right-boundary step lemma. The alternative
+`rightMoveTile` path is discharged via `tau1_no_state_marker_then_sharp`:
+after `sep_forced_weak` (in either branch), the residual `A3` has
+`↟ₛqNew_q :: # :: …` somewhere in `tau1 A3`, which is structurally
+impossible. -/
+private lemma starts_with_stepTilesRightBoundary_weak_ext (tm : SingleTapeTM Symbol)
+    (w_in : List Symbol)
+    (q : tm.State) (t : BiTape Symbol)
+    (qNew_q : tm.State) (w : Option Symbol)
+    (htr : tm.tr q t.head = (⟨w, some Dir.right⟩, some qNew_q))
+    (h_right_empty : t.right.toList = [])
+    (h_nondeg : w ≠ none ∨ t.left.toList ≠ [])
+    (rest_cfgs : List tm.Cfg)
+    (A : Stack (Alpha tm.State Symbol))
+    (h_mem : ∀ s ∈ A, s ∈ startTile tm w_in :: luTiles tm)
+    (h_eq : tau1 A = encodeRunningCfg tm q t ++ [#] ++
+              queueEncoding tm rest_cfgs ++ tau2 A) :
+    ∃ A' : Stack (Alpha tm.State Symbol),
+        A'.length < A.length ∧
+        (∀ s ∈ A', s ∈ startTile tm w_in :: luTiles tm) ∧
+        tau1 A' = queueEncoding tm
+            (rest_cfgs ++ [⟨some qNew_q, (t.write w).move_right⟩]) ++ tau2 A' := by
+  have h_not_left : ∀ (qN : Option tm.State) (w' : Option Symbol),
+      tm.tr q t.head ≠ (⟨w', some Dir.left⟩, qN) := by
+    intro qN w' h
+    rw [htr] at h
+    injection h with h1 _
+    injection h1 with _ h_dir
+    injection h_dir with h_dir2
+    cases h_dir2
+  have h_eq' : tau1 A = liftTape tm t.left.toList.reverse ++
+      ↟ₛq :: ↟ₜt.head :: ([#] ++ queueEncoding tm rest_cfgs ++ tau2 A) := by
+    simpa [encodeRunningCfg, h_right_empty, liftTape_nil,
+           List.append_assoc] using h_eq
+  obtain ⟨A1, hA, hA_mem, hA_tau1, hA_tau2⟩ :=
+    copy_prefix_forced_state_lead_weak tm w_in q t.head h_not_left
+      t.left.toList.reverse A
+      ([#] ++ queueEncoding tm rest_cfgs ++ tau2 A) h_mem h_eq'
+  obtain ⟨tile, A2, hA1_decomp, h_tile_in, hA2_mem⟩ :=
+    transition_forced_weak tm w_in q t.head
+      ([#] ++ queueEncoding tm rest_cfgs ++ tau2 A) A1 hA_mem hA_tau1
+  simp only [transitionTilesFor] at h_tile_in
+  rw [htr] at h_tile_in
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at h_tile_in
+  rcases h_tile_in with rfl | rfl
+  · -- rightMoveTile alternative — ruled out via tau1_no_state_marker_then_sharp.
+    exfalso
+    have hA2_tau1 : tau1 A2 = [#] ++ queueEncoding tm rest_cfgs ++ tau2 A := by
+      have key := hA_tau1
+      rw [hA1_decomp, tau1_cons, rightMoveTile_top] at key
+      simpa using key
+    obtain ⟨A3, hA2_decomp_disj, hA3_tau1, hA3_mem⟩ :=
+      sep_forced_weak tm w_in (queueEncoding tm rest_cfgs ++ tau2 A) A2
+        hA2_mem (by simpa using hA2_tau1)
+    rcases hA2_decomp_disj with ⟨hA2_decomp, _⟩ | ⟨hA2_decomp, _⟩
+    · -- sepTile branch.
+      have hA3_tau1_full :
+          tau1 A3 = (queueEncoding tm rest_cfgs ++
+              liftTape tm t.left.toList.reverse ++ [↟ₜw]) ++
+            ↟ₛqNew_q :: # :: tau2 A3 := by
+        rw [hA3_tau1, hA_tau2, hA1_decomp, tau2_cons, rightMoveTile_bot,
+            hA2_decomp, tau2_cons, sepTile_bot, stateMarker_some]
+        simp [List.append_assoc]
+      exact tau1_no_state_marker_then_sharp tm w_in qNew_q A3 _ (tau2 A3)
+        hA3_mem hA3_tau1_full
+    · -- startTile branch.
+      have hA3_tau1_full :
+          tau1 A3 = (queueEncoding tm rest_cfgs ++
+              liftTape tm t.left.toList.reverse ++ [↟ₜw]) ++
+            ↟ₛqNew_q :: # ::
+              (encodeCfg tm (SingleTapeTM.initCfg tm w_in) ++
+                [#] ++ tau2 A3) := by
+        rw [hA3_tau1, hA_tau2, hA1_decomp, tau2_cons, rightMoveTile_bot,
+            hA2_decomp, tau2_cons, startTile_bot, stateMarker_some]
+        simp [List.append_assoc]
+      exact tau1_no_state_marker_then_sharp tm w_in qNew_q A3 _ _
+        hA3_mem hA3_tau1_full
+  · -- Canonical: rightMoveBoundaryTile.
+    have hA2_tau1 : tau1 A2 = queueEncoding tm rest_cfgs ++ tau2 A := by
+      have key := hA_tau1
+      rw [hA1_decomp, tau1_cons, rightMoveBoundaryTile_top] at key
+      simpa using key
+    refine ⟨A2, ?_, hA2_mem, ?_⟩
+    · rw [hA, hA1_decomp]
+      simp [List.length_append, List.length_map, List.length_reverse]
+      omega
+    · rw [hA2_tau1, hA_tau2, hA1_decomp, tau2_cons,
+          rightMoveBoundaryTile_bot, stateMarker_some,
+          queueEncoding_append_single,
+          encodeCfg_after_right_move_boundary_eq tm (some qNew_q) t w
+            h_nondeg h_right_empty]
+      simp [List.append_assoc]
 
 private lemma starts_with_stepTilesLeftInterior_weak_ext (tm : SingleTapeTM Symbol)
     (w_in : List Symbol)
