@@ -3791,15 +3791,6 @@ theorem halt_le_mpcp_strong (tm : SingleTapeTM Symbol)
         (le_refl _) Relation.ReflTransGen.refl h_mem h_match'
     exact ⟨tape, h_trace⟩
 
-/-- The forward direction of the canonical `Halts ↔ MHasSolution` iff,
-retained as a named one-direction wrapper for readability. The full
-canonical iff is `halt_le_mpcp` (below). -/
-theorem halts_iff_mhasSolution_forward (tm : SingleTapeTM Symbol)
-    (h_nbw : NoBlankWrites tm) (w : List Symbol)
-    (h_nlb : NoLeftBoundary tm w) :
-    Halts tm w → MHasSolution (startTile tm w) (haltTiles tm) :=
-  halts_implies_mhasSolution tm h_nbw w h_nlb
-
 /-! ## Step 6 (canonical): `backward_aux_weak` — strong induction with
 chain-tracked queue
 
@@ -4078,13 +4069,5 @@ theorem halt_le_mpcp (tm : SingleTapeTM Symbol)
     Halts tm w ↔ MHasSolution (startTile tm w) (haltTiles tm) :=
   ⟨halts_implies_mhasSolution tm h_nbw w h_nlb,
    mhasSolution_implies_halts tm h_nbw w h_nlb⟩
-
-/-- Alias retained for the older name. -/
-@[deprecated halt_le_mpcp (since := "2026-05-14")]
-theorem halts_iff_mhasSolution (tm : SingleTapeTM Symbol)
-    (h_nbw : NoBlankWrites tm) (w : List Symbol)
-    (h_nlb : NoLeftBoundary tm w) :
-    Halts tm w ↔ MHasSolution (startTile tm w) (haltTiles tm) :=
-  halt_le_mpcp tm h_nbw w h_nlb
 
 end PCP.HaltToMPCP

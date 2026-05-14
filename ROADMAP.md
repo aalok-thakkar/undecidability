@@ -1,7 +1,10 @@
 # Roadmap
 
-The reduction chain `Halt ≤_m MPCP ≤_m PCP` — what is done and what would
-have to happen for a complete undecidability proof.
+The reduction chain `Halt ≤_m MPCP ≤_m PCP ≤_m CFG-Intersection-Nonempty`
+— what is done and what would have to happen for a complete undecidability
+proof. The PCP and CFG portions are closed as iffs; the missing piece for
+end-to-end undecidability is a proof that `Halts` itself is undecidable,
+which is in progress in `Halt/` (see [`Halt/ROADMAP.md`](Halt/ROADMAP.md)).
 
 ## ✅ Complete in this repo
 
@@ -156,48 +159,40 @@ theorem halts_iff_pcp (tm : SingleTapeTM Symbol) (w : List Symbol)
 
 The transitive composition of `halt_le_mpcp` with `mpcp_iff_pcp`.
 
-## 🚧 External dependencies (out of scope for this repo)
+### `PCP ≤_m CFG-Intersection-Nonempty` — `CFG/PcpReduction.lean`
 
-To conclude "PCP is undecidable" from `halts_iff_pcp`, two more pieces
-are required. Neither is in this repo nor in cslib.
+```lean
+theorem hasSolution_iff_intersectionNonempty (P : Stack α) :
+    HasSolution P ↔
+    ∃ w, w ∈ (topCFG P).language ∧ w ∈ (botCFG P).language
+```
+
+Builds two context-free grammars over `α ⊕ Tile α` whose intersection
+is non-empty iff the PCP instance has a solution. Uses Mathlib's
+`ContextFreeGrammar` (cslib has no CFG framework).
+
+## 🚧 Remaining work
 
 ### 1. Halting-problem undecidability for `Turing.SingleTapeTM`
 
-A theorem of the form
+In progress in `Halt/` via **Path C** — a self-contained Cantor
+diagonalisation against a universal `SingleTapeTM` built inside this
+repo. See [`Halt/ROADMAP.md`](Halt/ROADMAP.md) for the full plan.
 
-```lean
-¬ ∃ (decide : (Σ tm : SingleTapeTM Symbol, List Symbol) → Bool),
-    ∀ x, decide x = true ↔ Halts x.1 x.2
-```
+Current state:
+* `Halt.Diagonal` — model-independent diagonal kernel ✅
+* `Halt.Basic` — `HaltDecidable` predicate ✅
+* Phase 1 (`Halt.TMCode`) — normalised TM representation ✅
+* Phase 2 (`Halt.Encoding`) — Gödel numbering ✅ mostly
+* Phase 3 — universal `SingleTapeTM` 🚧 not started (~2000–4000 LoC)
+* Phase 4 — self-application diagonal closing `halt_undecidable` 🚧
 
-**Mathlib has a halting-problem undecidability proof, but for a
-different model.** Specifically,
+Mathlib's
 [`Mathlib.Computability.Halting.halting_problem`](https://leanprover-community.github.io/mathlib4_docs/Mathlib/Computability/Halting.html)
-proves
-
-```lean
-theorem halting_problem (n) : ¬ComputablePred fun c => (eval c n).Dom
-```
-
-where `c : Nat.Partrec.Code` and `eval c n : Part ℕ`. This is the
-Halting Problem for **partial recursive function codes**, not for cslib's
-`Turing.SingleTapeTM`.
-
-Bridging the two would require either:
-- showing `Turing.SingleTapeTM` can simulate every `Nat.Partrec.Code`
-  (then transport Mathlib's `halting_problem` via the simulation), or
-- showing the reverse: `Nat.Partrec.Code` can simulate every
-  `Turing.SingleTapeTM` (so cslib's `Halts` reduces to Mathlib's
-  halting predicate).
-
-Mathlib's `Computability.TMToPartrec` provides such a bridge for
-*Mathlib's own* TM model (`Turing.PartrecToTM2`), not for cslib's
-`SingleTapeTM`. Building the analogous bridge for cslib's model is a
-substantial development of its own; we leave it as future work.
-
-A first-principles proof (Cantor / diagonalisation against a universal
-cslib `SingleTapeTM`) is an alternative — comparable in size to
-Mathlib's existing proof for `Nat.Partrec.Code`.
+proves the undecidability of halting for `Nat.Partrec.Code`, not for
+cslib's `Turing.SingleTapeTM`. A simulation bridge between the two
+would also work and is a viable alternative (Path A in
+`Halt/ROADMAP.md`).
 
 ### 2. HUM normalisation
 
@@ -223,8 +218,9 @@ The Coq counterpart in
 [`coq-library-undecidability`](https://github.com/uds-psl/coq-library-undecidability)
 runs to roughly 1500 lines for the `Halt ≤_m MPCP ≤_m PCP` chain alone.
 Our Lean development reaches ~4200 lines for the same content (more
-verbose decidability/structural plumbing). HUM normalisation and
-halting-problem undecidability would each add ~500–1000 LoC.
+verbose decidability/structural plumbing). HUM normalisation would add
+~500–1000 LoC; halting-problem undecidability (Path C, in `Halt/`) is
+estimated at ~2650–5500 LoC — see `Halt/ROADMAP.md`.
 
 ## Build invariant
 

@@ -1,8 +1,6 @@
-name = "PCP"
+name = "undecidability"
 version = "0.1.0"
-defaultTargets = ["pcp"]
-
-
+defaultTargets = ["PCP", "CFG", "Halt", "pcp"]
 
 [[lean_lib]]
 name = "PCP"
@@ -13,15 +11,12 @@ name = "CFG"
 [[lean_lib]]
 name = "Halt"
 
-
 [[require]]
 name = "cslib"
 scope = "leanprover"
 rev = "main"
 
-
 [[lean_exe]]
 name = "pcp"
 root = "Main"
-
 

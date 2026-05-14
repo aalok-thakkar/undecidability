@@ -8,7 +8,7 @@ linked by reductions, all built on top of cslib's
 |---|---|---|
 | **`PCP/`** | `halts_iff_pcp : Halts tm w ↔ HasSolution (mpcpToPcp …)` | ✅ complete |
 | **`CFG/`** | `hasSolution_iff_intersectionNonempty : HasSolution P ↔ ∃ w, w ∈ L(topCFG) ∩ L(botCFG)` | ✅ complete |
-| **`Halt/`** | `halt_undecidable : ¬ ∃ computable decider for Halts` | 🚧 in progress (Path C, Phase 1 of 4) |
+| **`Halt/`** | `halt_undecidable : ¬ ∃ computable decider for Halts` | 🚧 in progress (Path C, Phases 1–2 done, 3–4 pending) |
 
 The proof contains **no `sorry`** anywhere and is verified against
 `leanprover/lean4:v4.29.0-rc4` (see `lake-manifest.json`).
@@ -48,10 +48,12 @@ The reductions are closed as iffs; the missing piece for an end-to-end
 
 1. **Halting-problem undecidability for cslib's `Turing.SingleTapeTM`.**
    This is the subject of the new `Halt/` library. The kernel diagonal
-   argument is in (`Halt/Diagonal.lean`) and Phase 1 of the chosen
+   argument is in `Halt/Diagonal.lean`, Phase 1 of the chosen
    construction (Path C — direct universal `SingleTapeTM` +
-   self-application) is in (`Halt/TMCode.lean`). Phases 2–4 are
-   substantial future work; see `Halt/ROADMAP.md` for the plan.
+   self-application) is in `Halt/TMCode.lean`, and Phase 2 (Gödel
+   numbering) is in `Halt/Encoding.lean`. Phases 3–4 (the universal
+   `SingleTapeTM` and the self-application diagonal) are substantial
+   future work; see `Halt/ROADMAP.md` for the plan.
 
    Note that Mathlib *does* prove the Halting Problem
    ([`Mathlib.Computability.Halting.halting_problem`](https://leanprover-community.github.io/mathlib4_docs/Mathlib/Computability/Halting.html)),
@@ -145,7 +147,7 @@ Uses Mathlib's `ContextFreeGrammar`; cslib has no CFG framework.
 | `Halt.Diagonal` — Cantor + abstract halting contradiction  | ✅ complete         |
 | `Halt.Basic` — `HaltDecidable` predicate                   | ✅ complete         |
 | **Phase 1**: `Halt.TMCode` (normalised TM representation)  | ✅ complete         |
-| **Phase 2**: Gödel numbering (`encodeTMCode`)              | 🚧 not yet started  |
+| **Phase 2**: Gödel numbering (`Halt.Encoding`)             | ✅ mostly complete  |
 | **Phase 3**: Universal `SingleTapeTM` (the bulk of Path C) | 🚧 not yet started  |
 | **Phase 4**: Self-application diagonal + final theorem     | 🚧 not yet started  |
 
@@ -297,15 +299,15 @@ consume off its input tape.
 
 ## Next steps
 
-1. **Phase 2 of `Halt/`** — Gödel numbering of `TMCode` as `List Bool`.
-2. **Phase 3 of `Halt/`** — universal `SingleTapeTM` (the bulk of the
+1. **Phase 3 of `Halt/`** — universal `SingleTapeTM` (the bulk of the
    work, ~2000–4000 LoC).
-3. **Phase 4 of `Halt/`** — self-application diagonal closing
+2. **Phase 4 of `Halt/`** — self-application diagonal closing
    `halt_undecidable`.
-4. **HUM normalisation** — separate workstream, lifts the side
+3. **HUM normalisation** — separate workstream, lifts the side
    conditions to a generic TM.
 
-Once 1–3 land, the iff chain `Halt ≤_m MPCP ≤_m PCP ≤_m CFG-int` immediately yields
-concrete undecidability theorems for both PCP and CFG-intersection-emptiness.
+Once 1–2 land, the iff chain `Halt ≤_m MPCP ≤_m PCP ≤_m CFG-int` immediately
+yields concrete undecidability theorems for both PCP and
+CFG-intersection-emptiness.
 
 See `Halt/ROADMAP.md` and `ROADMAP.md` for full dependency trees.
