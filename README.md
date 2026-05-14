@@ -1,17 +1,38 @@
 # Undecidability
 
-A Lean 4 formalisation that the Post Correspondence Problem (PCP) is
-undecidable, via the standard reduction chain
+A Lean 4 formalisation of the standard reduction chain
 
 ```
 Lu ≤_m MPCP ≤_m PCP
 ```
 
-- **Lu (Universal Language / Halting Problem)**: undecidability is assumed.
-- **MPCP**: encodes a Turing-machine computation trace as a forced-start
-  string-matching problem.
-- **PCP**: the Hopcroft–Ullman symbol-padding technique reduces forced-start
-  MPCP to general PCP.
+connecting the Halting Problem to the Post Correspondence Problem (PCP).
+The top-level theorem (`halts_iff_pcp` in `PCP/Reductions/LuToPCP.lean`)
+shows that
+
+  `Halts tm w ↔ HasSolution (mpcpToPcp (startTile tm w) (luTiles tm))`
+
+for any single-tape Turing machine `tm` and input `w` satisfying the
+Hopcroft–Ullman–Motwani side conditions `NoBlankWrites` and
+`NoLeftBoundary`.
+
+## What this repository does *not* prove
+
+To conclude "PCP is undecidable" from `halts_iff_pcp`, two more pieces
+are required, **neither of which is in this repository or in cslib**:
+
+1. A proof that `Halts` itself is undecidable (the classical
+   Halting Problem). This is a substantial development in its own right
+   (universal TM + diagonalisation), and we leave it as future work.
+2. **HUM normalisation** — a construction lifting the side conditions
+   `NoBlankWrites` and `NoLeftBoundary` to an arbitrary TM (the standard
+   sentinel-shift construction).
+
+What we prove here is the reduction chain itself, which is the
+mathematical core of the standard PCP-undecidability argument. See
+`ROADMAP.md` for the dependency tree.
+
+## Conventions
 
 The `Lu ≤_m MPCP` reduction follows the **Hopcroft–Ullman–Motwani
 one-sided-tape design**: the simulation tile set does not include a
@@ -43,7 +64,7 @@ PCP/
                                 Lu ≤_m MPCP with MPCP ≤_m PCP.
 PCP.lean                     -- Library root.
 Main.lean                    -- Executable entry point.
-ROADMAP.md                   -- Detailed proof plan and next steps.
+ROADMAP.md                   -- Detailed proof plan and external deps.
 ```
 
 ## Status
@@ -59,7 +80,7 @@ ROADMAP.md                   -- Detailed proof plan and next steps.
 | Canonical `lu_le_mpcp` (`Halts ↔ MHasSolution`)            | ✅ complete           |
 | `halts_iff_pcp` (composition `Halts ↔ HasSolution …`)      | ✅ complete           |
 | Halting-problem undecidability                             | 🚧 not in repo or cslib |
-| HUM normalisation (lifting `NoBlankWrites`/`NoLeftBoundary`)| 🚧 not yet            |
+| HUM normalisation (lifting `NoBlankWrites`/`NoLeftBoundary`)| 🚧 future work        |
 
 ## What is proved
 
@@ -99,57 +120,75 @@ Top-level lemma: `halts_implies_mhasSolution`
 `(tm : SingleTapeTM Symbol) (h_nbw : NoBlankWrites tm) (w : List Symbol)`
 `(h_nlb : NoLeftBoundary tm w) (h : Halts tm w) : MHasSolution …`.
 
-### `Lu ≤_m MPCP` (backward) — strong-A iff complete
+### `Lu ≤_m MPCP` (backward) — canonical iff complete
 
-The backward direction inverts the forward construction. Strategy:
+The backward direction inverts the forward construction in two layers.
+
+**Strong-A form** (`lu_le_mpcp_strong`): handles `A ⊆ luTiles tm` via
 strong induction on `A.length`, peeling one canonical "block" off the
 front of `A` per TM step.
 
-| Lemma                                  | Role                                             | Status |
-|----------------------------------------|--------------------------------------------------|--------|
-| `mem_luTiles_top`                      | Identify each tile in `luTiles` by its constructor | ✅ |
-| `copy_prefix_forced`                   | Force `copyTile`s on a `liftTape`-prefix         | ✅ |
-| `transition_forced`                    | Force the transition tile after a state marker   | ✅ |
-| `copy_prefix_forced_state_lead`        | Strip copies up to a state marker (non-left)     | ✅ |
-| `sep_forced`                           | Force `sepTile` when the lead is `#`             | ✅ |
-| `no_tile_for_state_sharp`              | Rule out `↟ₛq :: # :: …` lookaheads             | ✅ |
-| `starts_with_stepTilesNoMove`          | Backward step, no-move                           | ✅ |
-| `starts_with_stepTilesRightInterior`   | Backward step, right-move, `t.right ≠ []`        | ✅ |
-| `starts_with_stepTilesRightBoundary`   | Backward step, right-move, `t.right = []`, `qNew = some _` | ✅ |
-| `starts_with_stepTilesLeftInterior`    | Backward step, left-move, `t.left ≠ []`          | ✅ |
-| `backward_aux`                         | Main strong-induction driver (strong hypothesis) | ✅ |
-| `lu_le_mpcp` (strong-A iff)            | Top-level theorem                                | ✅ |
+| Lemma                                  | Role                                             |
+|----------------------------------------|--------------------------------------------------|
+| `mem_luTiles_top`                      | Identify each tile in `luTiles` by its constructor |
+| `copy_prefix_forced`                   | Force `copyTile`s on a `liftTape`-prefix         |
+| `transition_forced`                    | Force the transition tile after a state marker   |
+| `copy_prefix_forced_state_lead`        | Strip copies up to a state marker (non-left)     |
+| `sep_forced`                           | Force `sepTile` when the lead is `#`             |
+| `no_tile_for_state_sharp`              | Rule out `↟ₛq :: # :: …` lookaheads             |
+| `starts_with_stepTilesNoMove`          | Backward step, no-move                           |
+| `starts_with_stepTilesRightInterior`   | Backward step, right-move, `t.right ≠ []`        |
+| `starts_with_stepTilesRightBoundary`   | Backward step, right-move, `t.right = []`        |
+| `starts_with_stepTilesLeftInterior`    | Backward step, left-move, `t.left ≠ []`          |
+| `backward_aux`                         | Main strong-induction driver (strong hypothesis) |
+| `lu_le_mpcp_strong`                    | Strong-A top-level theorem                       |
 
-The left-boundary sub-case of Step 4 is *removed* by the HUM refactor:
-the `NoLeftBoundary` constraint ensures no reachable cfg ever invokes a
+The left-boundary sub-case is *removed* by the HUM refactor: the
+`NoLeftBoundary` constraint ensures no reachable cfg ever invokes a
 left-move at the left boundary, so no corresponding sub-lemma is needed.
-
 The halt-now sub-case in `backward_aux` is handled directly (single TM
 step to a halted cfg, then `ReflTransGen.refl`) — this sidesteps the
 need for a `starts_with_absorbAndFinish` lemma, which would otherwise
-fail because the absorption-phase decomposition is non-unique (e.g.
-`[copyTile l, absorbRightTile r, sepTile, absorbLeftTile l, sepTile,
-finalTile]` is a valid alternative to the canonical
-`absorbAndFinish [l] [r]`).
+fail because the absorption-phase decomposition is non-unique.
+
+**Canonical form** (`lu_le_mpcp`): handles `A ⊆ startTile :: luTiles tm`
+via `backward_aux_weak`, which threads a chain-tracked cfg queue
+`List (Σ' c, ReflTransGen ... initCfg c)`. When `startTile` appears
+mid-stream in `A`, it pushes an extra `initCfg` (with a `refl` chain)
+onto the queue, alongside the natural `stepResult` advancement. The
+right-boundary alternative `rightMoveTile` path is ruled out by
+`tau1_no_state_marker_then_sharp`, a structural property showing that
+`tau1 A` never contains `↟ₛq :: # :: …` as a sublist (no tile's top has
+`↟ₛq` followed by `#`, and no top ends with `↟ₛq`).
+
+### `Lu ≤_m PCP` — `PCP/Reductions/LuToPCP.lean`
+
+```lean
+theorem halts_iff_pcp (tm : SingleTapeTM Symbol) (w : List Symbol)
+    (h_nbw : NoBlankWrites tm) (h_nlb : NoLeftBoundary tm w) :
+    Halts tm w ↔
+    HasSolution (mpcpToPcp (startTile tm w) (luTiles tm)) :=
+  (lu_le_mpcp tm h_nbw w h_nlb).trans (mpcp_iff_pcp _ _)
+```
+
+The transitive composition of the two reductions: `Halts` and PCP
+solvability of the explicit, computably constructed instance
+`mpcpToPcp (startTile tm w) (luTiles tm)` are equivalent.
 
 ## Next steps
 
-The remaining piece toward the canonical `Halts ↔ MHasSolution` iff is
-the **membership-purification step**: showing that any solution `A`
-drawn from `startTile :: luTiles tm` (the MHasSolution form) can be
-purified to use only `luTiles tm` tiles (the strong-A form already
-proved). At every block boundary the matching invariant's lookahead
-starts with a tape lift, state marker, or `h⊥` — never `#` — so
-`startTile` (top `[#]`) is ruled out by character mismatch. Within a
-step block, `copy_prefix_forced` / `transition_forced` /
-`copy_prefix_forced_state_lead` already rule out `startTile` by similar
-analysis. The remaining ambiguity is at the `sepTile` position, where
-the lookahead is `# :: …` and `startTile.top = [#]` matches. Resolving
-this requires either:
+The reduction chain is closed; what remains for a complete PCP-undecidability
+proof in Lean 4 is external to this repository:
 
-* Extending `sep_forced` with a tau2-side disambiguation hypothesis, or
-* Threading an "extra encoding accumulator" through `backward_aux` to
-  reflect the doubled lookahead `tau1 A = encodeCfg cfg ++ [#] ++ extra
-  ++ tau2 A` that arises after `startTile` mid-stream.
+1. **Halting-problem undecidability.** A theorem of the form
+   `¬ ∃ decide, ∀ tm w, decide ⟨tm, w⟩ = true ↔ Halts tm w`.
+   Neither this repository nor cslib provides it. A first-principles
+   diagonalisation proof would be a substantial development on its own.
 
-See `ROADMAP.md` for the detailed dependency tree.
+2. **HUM normalisation.** A construction
+   `tm ↦ (tm', w')` producing an equivalent machine satisfying both
+   `NoBlankWrites` and `NoLeftBoundary`. The standard sentinel-shift
+   technique is straightforward but bulky (~500–1000 LoC); left for a
+   future `PCP.Normalize` module.
+
+See `ROADMAP.md` for further details.

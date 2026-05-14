@@ -62,34 +62,50 @@ extends it with the next configuration. After halt, the absorb tiles
 shrink the lookahead one tape symbol at a time until only `h⊥` remains,
 then the final tile equalises top and bot.
 
-## Status
+## HUM side conditions
 
-This file provides:
+The reduction is stated under the Hopcroft–Ullman–Motwani one-sided-tape
+side conditions:
+
+* `NoBlankWrites tm` — `tm.tr` never writes the blank symbol; this keeps
+  the tape encoding finite and avoids `StackTape.cons` ambiguity.
+* `NoLeftBoundary tm w` — no reachable cfg from `initCfg tm w` invokes
+  a left-move at the left tape boundary. This removes the
+  `leftMoveBoundaryTile` case from the tile set, making each
+  configuration's transition tile sequence unambiguous.
+
+Lifting these to a generic TM (the standard sentinel-shift construction)
+is left for a future `PCP.Normalize` module.
+
+## Contents
 
 * Alphabet `Alpha` and configuration encoding (`encodeRunningCfg`,
   `encodeHaltedCfg`, `encodeCfg`, `block`, `initBlock`).
 * All tile constructors (`startTile`, `copyTile`, `sepTile`, the
-  six transition-tile constructors, `absorbLeftTile`, `absorbRightTile`,
+  transition-tile constructors, `absorbLeftTile`, `absorbRightTile`,
   `finalTile`).
 * Tile enumeration (`copyTiles`, `absorbTiles`, `transitionTiles`,
   `luTiles`) and the reduction function `luToMpcp`.
-* Membership lemmas relating each tile family to `luTiles`.
-* `tau1`/`tau2` of copy-tile sequences.
-* The full simulation lemma for the **no-move** TM-step case
-  (`stepTilesNoMove` plus `tau1_stepTilesNoMove`,
-  `tau2_stepTilesNoMove`, `stepTilesNoMove_subset_luTiles`).
+* Step-simulation lemmas for all four reachable TM-step cases (no-move,
+  right-interior, right-boundary, left-interior).
+* Halt-absorption iteration lemmas culminating in
+  `absorbAndFinish_matching`.
+* `forward_aux` and `halts_implies_mhasSolution` — the forward
+  direction.
+* `mem_luTiles_top`, `copy_prefix_forced`, `transition_forced`,
+  `sep_forced`, `no_tile_for_state_sharp` and their queue-aware variants
+  — the structural forcing lemmas used by the backward proof.
+* Per-step backward lemmas `starts_with_stepTiles*` (canonical) and
+  their `_weak_ext` queue-aware versions.
+* `tau1_no_state_marker_then_sharp` — the structural property that rules
+  out the alternative `rightMoveTile` decomposition in the right-boundary
+  case.
+* `backward_aux_weak` — the main backward driver, strong induction on
+  `A.length` with a chain-tracked cfg queue.
+* `lu_le_mpcp` — the canonical `Halts ↔ MHasSolution` iff (top-level
+  theorem of this file).
 
-Remaining work — see `ROADMAP.md` at the project root for the detailed
-plan:
-
-1. Right-move and left-move step-simulation lemmas (interior + boundary).
-2. Halt-absorption iteration lemmas.
-3. Forward direction `Halts → MHasSolution`.
-4. Backward direction `MHasSolution → Halts`.
-5. Final theorem `lu_le_mpcp`.
-
-The Coq counterpart in `coq-library-undecidability` runs to ~1500
-lines, so this remaining work spans multiple sessions.
+See `ROADMAP.md` at the project root for the dependency tree.
 -/
 
 namespace PCP.LuToMPCP
@@ -1690,156 +1706,39 @@ theorem halts_implies_mhasSolution (tm : SingleTapeTM Symbol)
 
 /-! ## Backward direction: `MHasSolution → Halts`
 
-### Proof plan
+The backward direction is established in two layers:
 
-We want:
-```
-theorem mhasSolution_implies_halts (tm : SingleTapeTM Symbol)
-    (h_nbw : NoBlankWrites tm) (w : List Symbol)
-    (h : MHasSolution (startTile tm w) (luTiles tm)) :
-    Halts tm w
-```
+1. A **strong-A form** (`lu_le_mpcp_strong`, proved via `backward_aux`)
+   handles `A ⊆ luTiles tm`. It performs strong induction on `A.length`,
+   peeling one canonical "block" off the front per TM step:
+   * `copy_prefix_forced` consumes the left-tape prefix.
+   * `transition_forced` selects the unique transition tile for the
+     current `(q, a)`.
+   * `copy_prefix_forced_state_lead` consumes the right-tape suffix.
+   * `sep_forced` consumes the `#` separator.
+   The halted-cfg base case returns `ReflTransGen.refl`; the halt-now
+   sub-case (`qNew = none` at the right boundary) is handled with a
+   single TM step via `tm_step_running`.
 
-Unpacking `MHasSolution` gives a tile list `A` with
-`∀ t ∈ A, t ∈ luTiles tm` and the matching equation
+   Note: there is *no* `starts_with_absorbAndFinish` lemma — the
+   absorption-phase decomposition is non-unique (e.g. with `left = [l]`,
+   `right = [r]`, both `[absorbLeftTile l, copyTile r, sepTile,
+   absorbRightTile r, sepTile, finalTile]` and `[copyTile l,
+   absorbRightTile r, sepTile, absorbLeftTile l, sepTile, finalTile]`
+   are valid), so the canonical decomposition cannot be forced. The
+   halt-now sub-case sidesteps the absorption phase entirely.
 
-  `tau1 A = encodeCfg tm (initCfg tm w) ++ [#] ++ tau2 A`   … (★)
+2. A **canonical form** (`lu_le_mpcp`, proved via `backward_aux_weak`)
+   handles `A ⊆ startTile :: luTiles tm`. It threads a chain-tracked
+   cfg queue `List (Σ' c, ReflTransGen ... initCfg c)`: each queued cfg
+   carries its own `ReflTransGen` chain from `initCfg`. When `startTile`
+   appears mid-stream in `A`, it pushes an extra `initCfg` (with a
+   `refl` chain) onto the queue, in addition to the natural `stepResult`
+   advancement. The right-boundary alternative `rightMoveTile` path is
+   ruled out by `tau1_no_state_marker_then_sharp`, a structural property
+   showing that `tau1 A` never contains `↟ₛq :: # :: …` as a sublist.
 
-The proof proceeds by **strong induction on `A.length`**, maintaining (★)
-as the invariant and the current configuration `cfg` as a parameter.
-
----
-
-#### Step 1 — `mem_luTiles_top`: characterise every tile top in `luTiles`
-
-Every tile `t ∈ luTiles tm` has top of one of these eight shapes:
-
-| Top shape            | Tile family          |
-|----------------------|----------------------|
-| `[↟ₜa]`             | `copyTile a`         |
-| `[#]`               | `sepTile`            |
-| `[↟ₛq, ↟ₜa]`        | `noMoveTile`, `rightMoveTile`, `leftMoveBoundaryTile` |
-| `[↟ₛq, ↟ₜa, #]`     | `rightMoveBoundaryTile` |
-| `[↟ₜb, ↟ₛq, ↟ₜa]`   | `leftMoveTile`       |
-| `[↟ₜa, h⊥]`         | `absorbLeftTile a`   |
-| `[h⊥, ↟ₜa]`         | `absorbRightTile a`  |
-| `[h⊥, #, #]`        | `finalTile`          |
-
-Proof: unfold `luTiles`, case-split on membership in each sub-list, then
-read off the `top` field using the `@[simp]` projection lemmas.
-
----
-
-#### Step 2 — `copy_prefix_forced`: tape-lift prefix forces copy tiles
-
-**Lemma.** If `tau1 A = liftTape tm L ++ rest ++ tau2 A`
-and `rest` does not begin with `h⊥`, then
-`A = L.map (copyTile tm) ++ A'` for some `A'` with
-`tau1 A' = rest ++ tau2 A'`.
-
-*Key argument* (by induction on `L`):
-The invariant's first character is `↟ₜa` (a tape lift). From
-`mem_luTiles_top`, the only tiles with first top character `↟ₜa` are:
-- `copyTile a` (top = `[↟ₜa]`, bot = `[↟ₜa]`) — transparent.
-- `leftMoveTile` (top = `[↟ₜa, ↟ₛq, ↟ₜh]`) — second char `↟ₛq`, but
-  the invariant's second character is either `↟ₜ_` (another tape lift,
-  when `L` has more elements) or `↟ₛq` (only at the last left symbol).
-- `absorbLeftTile a` (top = `[↟ₜa, h⊥]`) — ruled out by the `rest`
-  hypothesis (second char would need to be `h⊥`).
-
-When `L` has ≥ 2 elements the second char is `↟ₜ_`, ruling out
-`leftMoveTile` and `absorbLeftTile`; hence the first tile is `copyTile a`.
-When `L` has exactly one element, the second char is the first char of
-`rest`; the `rest ≠ h⊥…` hypothesis rules out `absorbLeftTile`, and
-whether `leftMoveTile` applies is decided in Step 3.
-
----
-
-#### Step 3 — `transition_forced`: state-marker forces unique transition tile
-
-**Lemma.** If `tau1 A = [↟ₛq] ++ stuff ++ tau2 A` and
-`∀ t ∈ A, t ∈ luTiles tm`, then the first tile of `A` is the unique
-transition tile for `(q, head)` determined by `tm.tr q head`.
-
-*Key argument*: from `mem_luTiles_top`, the only tiles whose top begins
-with `↟ₛq` are those in `transitionTilesFor tm q _`. Since `transitionTiles`
-is indexed over all `(q, a)` pairs, only tiles for the specific `a` matching
-the second invariant character can have their top align; and
-`transitionTilesFor tm q a` contains exactly one move-direction variant
-(no-move, right, or left) per the value of `tm.tr q a`.
-
-In the left-boundary sub-case (tape.left = []) the tile is
-`leftMoveBoundaryTile`; in the left-interior sub-case (one left symbol
-remaining) the tile is `leftMoveTile`, whose 3-character top
-`[↟ₜb, ↟ₛq, ↟ₜa]` is forced by `copy_prefix_forced` having already
-consumed all but the last left symbol.
-
----
-
-#### Step 4 — `starts_with_stepTiles`: running cfg forces a full step group
-
-**Lemma.** If `tau1 A = encodeRunningCfg tm q tape ++ [#] ++ tau2 A`
-and `∀ t ∈ A, t ∈ luTiles tm`, then
-```
-∃ A', A = stepTiles tm q tape ++ A' ∧
-      (∀ t ∈ A', t ∈ luTiles tm) ∧
-      tau1 A' = encodeCfg tm (stepResult tm q tape) ++ [#] ++ tau2 A'
-```
-
-*Proof*: Apply `copy_prefix_forced` for the `|tape.left|` left-tape symbols,
-then `transition_forced` for the transition tile, then `copy_prefix_forced`
-again for the right-tape symbols, then observe the next char is `#` (forcing
-`sepTile`). Together these tiles are exactly `stepTiles tm q tape`, and
-the residual invariant follows from `tau1_stepTiles` and `tau2_stepTiles`.
-
----
-
-#### Step 5 — `starts_with_absorbAndFinish`: halted cfg forces absorption
-
-**Lemma.** If `tau1 A = encodeHaltedCfg tm tape ++ [#] ++ tau2 A`
-and `∀ t ∈ A, t ∈ luTiles tm`, then
-`A = absorbAndFinish tm tape.left.toList (tape.head :: tape.right.toList) ++ A'`
-for some `A'` satisfying `tau1 A' = tau2 A'`.
-
-*Proof*: Similar character-by-character forcing, using `absorbLeftTile`/
-`absorbRightTile` to consume the tape-lift symbols around `h⊥`, and
-`finalTile` (top = `[h⊥, #, #]`, bot = `[#]`) to close when
-the encoding has shrunk to `[h⊥]`.
-
----
-
-#### Step 6 — `backward_aux`: main induction
-
-```
-∀ n (A : Stack _) (cfg : tm.Cfg),
-    A.length ≤ n →
-    (∀ t ∈ A, t ∈ luTiles tm) →
-    tau1 A = encodeCfg tm cfg ++ [#] ++ tau2 A →
-    ∃ tape, ReflTransGen tm.TransitionRelation cfg ⟨none, tape⟩
-```
-
-- **Base** (`n = 0`, so `A = []`): `tau1 [] = [] ≠ encodeCfg … ++ [#]`. Contradiction.
-- **Halted** (`cfg = ⟨none, tape⟩`): `ReflTransGen.refl`.
-- **Running** (`cfg = ⟨some q, tape⟩`): apply `starts_with_stepTiles` to
-  get `A = stepTiles ++ A'` with `A'.length < A.length`; apply the IH to
-  `A'` and `stepResult tm q tape`; chain with one `TransitionRelation` step.
-
----
-
-#### Step 7 — final theorem
-
-```
-theorem lu_le_mpcp (tm : SingleTapeTM Symbol) (h_nbw : NoBlankWrites tm)
-    (w : List Symbol) :
-    Halts tm w ↔ MHasSolution (startTile tm w) (luTiles tm)
-```
-
-Forward: `halts_implies_mhasSolution` (already proved).
-Backward: unpack `MHasSolution`, cancel the leading `[#]` from the
-matching equation to obtain the invariant (★), then call `backward_aux`
-with `cfg = initCfg tm w`.
-
--/
+See `ROADMAP.md` for the detailed dependency tree. -/
 
 /-! ## Step 1: Characterise every tile of `luTiles` -/
 
@@ -3832,7 +3731,7 @@ private lemma backward_aux (tm : SingleTapeTM Symbol)
                 ih A' (stepResult tm q tape) hA'_len h_reach' hA'_mem hA'_match'
               exact ⟨tape_h, .head (tm_step_running tm q tape) h_h⟩
 
-/-! ## Step 7: `lu_le_mpcp` — the equivalence (strong form)
+/-! ## Step 7: `lu_le_mpcp_strong` — the equivalence (strong-A form)
 
 The reduction `Lu ≤_m MPCP` packaged as an `Iff` using a strengthened
 formulation: solutions are drawn from `luTiles tm` alone (rather than
@@ -3844,14 +3743,8 @@ Both directions assume `NoBlankWrites tm` and `NoLeftBoundary tm w`, the
 two HUM side conditions described in `Basic.lean`.
 
 The fully general statement `Halts tm w ↔ MHasSolution …` (which allows
-solutions to include the start tile mid-stream) requires an additional
-membership-purification step that is left for future work: at the
-sepTile position within each step block, both `sepTile` and `startTile`
-have top `[#]`, so the local matching invariant cannot distinguish them
-without tracking an "extra encoding accumulator" through the recursion.
-The structural HUM-style argument used by Hopcroft–Ullman–Motwani for
-the iff with the canonical MHasSolution definition requires this
-generalisation, which we have not yet formalised here. -/
+solutions to include the start tile mid-stream) is `lu_le_mpcp` below,
+established via `backward_aux_weak` with a chain-tracked cfg queue. -/
 
 /-- **`Lu ≤_m MPCP`** (strong-A form, auxiliary): `Halts tm w` is
 equivalent to the existence of a stack `A` whose tiles all belong to
@@ -3898,12 +3791,9 @@ theorem lu_le_mpcp_strong (tm : SingleTapeTM Symbol)
         (le_refl _) Relation.ReflTransGen.refl h_mem h_match'
     exact ⟨tape, h_trace⟩
 
-/-- The forward direction of the standard `Halts ↔ MHasSolution` iff:
-this is `halts_implies_mhasSolution` repackaged so the two sides of the
-reduction chain `Lu ≤_m MPCP ≤_m PCP` line up. The backward direction —
-that any `MHasSolution` solution can be purified to remove `startTile`
-occurrences in the rest of `A` — is the remaining piece toward a full
-`Halts ↔ MHasSolution` iff under HUM. See `ROADMAP.md`. -/
+/-- The forward direction of the canonical `Halts ↔ MHasSolution` iff,
+retained as a named one-direction wrapper for readability. The full
+canonical iff is `lu_le_mpcp` (below). -/
 theorem halts_iff_mhasSolution_forward (tm : SingleTapeTM Symbol)
     (h_nbw : NoBlankWrites tm) (w : List Symbol)
     (h_nlb : NoLeftBoundary tm w) :
