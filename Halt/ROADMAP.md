@@ -20,95 +20,110 @@ classically — its formal content arrives only when paired with a
 *computability* constraint on the decider. We do not commit to a
 specific notion of computability here.
 
-## 🚧 To do
+## 🚧 To do — Path C (chosen)
 
-The end goal is:
+We're going with **Path C**: build a universal `SingleTapeTM` directly,
+then close via self-application using `Halt.Diagonal.halt_diag_contradiction`.
+This is the largest path but the most self-contained — no Mathlib
+`Primcodable` machinery, no bridge to a different computation model.
 
-```lean
-theorem halt_undecidable (Symbol : Type) [Inhabited Symbol] [Fintype Symbol]
-    [Nonempty Symbol] :
-    ¬ ∃ decide : SingleTapeTM Symbol → List Symbol → Bool,
-        <computable in some fixed model> ∧
-        ∀ tm w, decide tm w = true ↔ Halts tm w
-```
-
-Closing it requires picking a model of "computable" and bridging it to
-the diagonal argument. Two viable paths:
-
-### Path A — via Mathlib's `halting_problem`
-
-Mathlib already has
+The end goal:
 
 ```lean
-theorem halting_problem (n) : ¬ ComputablePred fun c => (eval c n).Dom
+theorem halt_undecidable :
+    ¬ ∃ decider : SingleTapeTM Bool,
+        IsHaltDecider decider ∧
+        Halts decider w_for_every_input_etc
 ```
 
-for `c : Nat.Partrec.Code`. To use this here we need a **computability
-bridge**: a `Computable`-preserving translation from cslib's
-`SingleTapeTM Symbol` halting to `Nat.Partrec.Code` halting. Concretely:
+where `IsHaltDecider` says "decider on input `encode (tm, w)` halts
+with output `[true]` iff `tm` halts on `w`, and with output `[false]`
+otherwise".
 
-1. **Pick a fixed alphabet**: `Symbol := Fin n` (or `Bool`, or `ℕ` — any
-   `Primcodable` type). The general `[Inhabited] [Fintype]` will need
-   to specialise.
-2. **`Primcodable` instances** for `SingleTapeTM (Fin n)` and `List (Fin n)`.
-   This requires `Primcodable` for the TM's state space (so we
-   restrict to finitely-many states), transition function, etc.
-3. **A computable translation**
-   `tmEncoding : SingleTapeTM (Fin n) × List (Fin n) → Nat.Partrec.Code`
-   such that for every `(tm, w)`, `eval (tmEncoding tm w) 0` is defined
-   iff `Halts tm w`. This is the "every TM is a partrec function"
-   theorem — comparable in scope to Mathlib's `Computability.TMToPartrec`
-   for *its own* TM model, but for cslib's `SingleTapeTM`.
-4. **Conclude**: any `Computable` decider for `Halts` gives a
-   `Computable` decider for partrec halting, contradicting
-   `halting_problem`.
+### Phase 1 — Normalised TM representation
 
-Estimated scope: ~2000–4000 LoC of `Primcodable` plumbing +
-`tmEncoding` construction + simulation correctness.
+Fix the alphabet `Symbol := Bool` and require the state set to be
+`Fin n`. Two things:
+* `TMCode` — a finite, transferable code for a TM (number of states +
+  initial state + transition table).
+* `tmCodeToTM : TMCode → SingleTapeTM Bool` — interpretation as a real
+  cslib `SingleTapeTM`. Prove that `Halts (tmCodeToTM c) w` is
+  preserved by the interpretation (i.e. corresponds to "the TM `c`
+  halts on `w`" intuitively).
 
-### Path B — via cslib's `URM` and a URM-to-Partrec bridge
+This is mechanical but tedious. ~200–400 LoC.
 
-cslib has a URM (Unlimited Register Machine) computability framework
-(`Cslib.Computability.URM`) with `URM.Computable`. URM ↔ partial
-recursive functions is a classical equivalence; if we build one
-direction (say `URM.Computable → Nat.Partrec`), we can transport
-Mathlib's `halting_problem` to URM. Then if we *also* build
-SingleTapeTM ↔ URM, we get SingleTapeTM halting undecidability.
+### Phase 2 — Gödel numbering
 
-Estimated scope: SingleTapeTM ↔ URM is ~500–1500 LoC; URM → Partrec
-is ~500–2000 LoC.
+* `encodeTMCode : TMCode → List Bool` — serialise a TM.
+* `decodeTMCode : List Bool → Option TMCode` — partial inverse.
+* `decodeEncode : decodeTMCode (encodeTMCode c) = some c`.
 
-### Path C — direct universal SingleTapeTM + self-application
+Then `encodePair : List Bool → List Bool → List Bool` for encoding
+`(tm, w)` as a single tape input (with a separator).
 
-Bypass the bridges and build a universal `SingleTapeTM` together with
-a self-application diagonal. Closes via `Halt.Diagonal.halt_diag_contradiction`
-once the right encoding is in place.
+~150–300 LoC.
 
-Estimated scope: comparable to Path A in size, but the work is
-self-contained (no Mathlib `Primcodable` setup) at the cost of doing
-the universal-TM construction by hand.
+### Phase 3 — Universal TM
 
-## Recommended path
+Build `U : SingleTapeTM Bool` (with its own concrete state set, say
+`Fin k` for some k determined by the construction) such that
 
-**Path A** is cleanest because Mathlib already has `halting_problem`
-proved; we only do the simulation work, not the diagonal proof. The
-`Computability.TMToPartrec` template in Mathlib is also directly
-relevant. Path C is the most self-contained but largest.
+```lean
+theorem universal_correct (c : TMCode) (w : List Bool) :
+    Halts U (encodePair (encodeTMCode c) w) ↔
+    Halts (tmCodeToTM c) w
+```
 
-## Suggested incremental subgoals (Path A)
+This is the bulk of Path C. The universal TM has to:
+* Parse the encoded `TMCode` off the tape.
+* Maintain a simulated state pointer + simulated head position.
+* On each "outer" step, look up the encoded transition rule for the
+  current simulated state + head symbol, then execute it (write +
+  move).
+* Halt when the simulated state is the halt state (`none`).
 
-1. **Specialise the alphabet** to `Fin n` (or `Bool`). Add
-   `Primcodable` for `SingleTapeTM (Fin n)` — likely via a sigma over
-   `[Fintype State]`.
-2. **Encode TM configurations**: `Cfg`, `BiTape`, step relation —
-   prove each step is `Primrec` (or at least `Computable`) over the
-   encoding.
-3. **Define `tmEncoding`**: build the partrec code that, on input `0`,
-   simulates `tm` from `initCfg tm w`. Show it halts iff `Halts tm w`.
-4. **State and prove `halt_undecidable`**: contraposition of
-   `Computability.Halting.halting_problem`.
+Estimated ~2000–4000 LoC (this is the textbook universal-TM construction
+formalised). Can be broken into:
+* `Halt/UniversalTM/State.lean` — the U's state set + helpers.
+* `Halt/UniversalTM/Step.lean` — per-step simulation invariant.
+* `Halt/UniversalTM/Correctness.lean` — the `universal_correct` theorem.
 
-Each step is independent and can be a separate file in `Halt/`.
+### Phase 4 — Self-application diagonal
+
+Given a hypothetical decider `D : SingleTapeTM Bool` for halting,
+construct `Diag : SingleTapeTM Bool` that on input `code`:
+1. Forms `encodePair code code` (self-application).
+2. Simulates `D` on it via `U`.
+3. Branches on `D`'s output:
+   * `D` says "halts" → enter an infinite loop.
+   * `D` says "doesn't halt" → halt.
+
+Then run `Diag` on `encodeTMCode (codeOf Diag)`:
+* If `Diag` halts → by construction, `D` says it doesn't → contradiction.
+* If `Diag` doesn't halt → by construction, `D` says it halts → contradiction.
+
+Closes via `Halt.Diagonal.halt_diag_contradiction`.
+
+~300–800 LoC.
+
+## Total estimate
+
+Phase 1: ~200–400
+Phase 2: ~150–300
+Phase 3: ~2000–4000  ← the bulk
+Phase 4: ~300–800
+
+Total: ~2650–5500 LoC across many sessions. Phase 3 is where most
+work concentrates.
+
+## Status
+
+* `Halt.Diagonal` — ✅ done (model-independent).
+* `Halt.Basic` — ✅ done (decision predicate, vacuous without
+  computability constraint).
+* Phase 1 (`Halt.TMCode`) — 🚧 in progress.
+* Phases 2–4 — 🚧 not yet started.
 
 ## Build invariant
 

@@ -8,6 +8,7 @@ module
 
 public import Halt.Diagonal
 public import Halt.Basic
+public import Halt.TMCode
 
 @[expose] public section
 
@@ -23,4 +24,7 @@ This module re-exports the public Halt-undecidability API:
   cslib's `Turing.SingleTapeTM` is decidable" (the predicate
   `HaltDecidable`), together with the goal theorem
   `halt_undecidable : ¬ HaltDecidable …` (proof: see `ROADMAP.md`).
+* `Halt.TMCode`    — normalised TM representation (Phase 1 of Path C):
+  `Bool` alphabet, `Fin (n+1)` states, with an interpretation map
+  `tmCodeToTM : TMCode → SingleTapeTM Bool`.
 -/
