@@ -10,6 +10,9 @@ name = "PCP"
 [[lean_lib]]
 name = "CFG"
 
+[[lean_lib]]
+name = "Halt"
+
 
 [[require]]
 name = "cslib"
