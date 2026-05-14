@@ -13,6 +13,7 @@ public import Halt.Encoding
 public import Halt.Pair
 public import Halt.Helpers
 public import Halt.CodeOf
+public import Halt.Undecidable
 
 @[expose] public section
 
@@ -41,4 +42,6 @@ This module re-exports the public Halt-undecidability API:
   with the bisimulation theorem
   `halts_codeOf_iff : Halts (codeOf tm).toTM w ↔ PCP.Halts tm w`.
   Phase 3e.
+* `Halt.Undecidable` — the final theorem `halt_undecidable`: no
+  `SingleTapeTM Bool` decides the self-halt problem `K`. Phase 4.
 -/

@@ -1,10 +1,12 @@
 # Roadmap
 
 The reduction chain `Halt ≤_m MPCP ≤_m PCP ≤_m CFG-Intersection-Nonempty`
-— what is done and what would have to happen for a complete undecidability
-proof. The PCP and CFG portions are closed as iffs; the missing piece for
-end-to-end undecidability is a proof that `Halts` itself is undecidable,
-which is in progress in `Halt/` (see [`Halt/ROADMAP.md`](Halt/ROADMAP.md)).
+— what is done. The PCP, CFG, and Halt portions are now all closed:
+* PCP/CFG reductions as iffs.
+* `Halt.Undecidable.halt_undecidable` for the self-halt problem of
+  cslib's `SingleTapeTM Bool` (see [`Halt/ROADMAP.md`](Halt/ROADMAP.md)).
+
+The remaining external dependency is HUM normalisation; see below.
 
 ## ✅ Complete in this repo
 
@@ -171,30 +173,25 @@ Builds two context-free grammars over `α ⊕ Tile α` whose intersection
 is non-empty iff the PCP instance has a solution. Uses Mathlib's
 `ContextFreeGrammar` (cslib has no CFG framework).
 
+## ✅ Halting-problem undecidability for `Turing.SingleTapeTM`
+
+`Halt/Undecidable.lean` proves:
+
+```lean
+theorem halt_undecidable :
+    ¬ ∃ D : SingleTapeTM Bool, IsSelfHaltDecider D
+```
+
+i.e., no `SingleTapeTM Bool` decides the self-halt problem
+`K = { c : TMCode | c.toTM halts on encodeTMCode c }`. The proof
+constructs a diagonal TM `diagTM D` for any putative decider and
+derives a contradiction via `Halt.CodeOf.halts_codeOf_iff` plus a
+deterministic-diamond argument. See [`Halt/ROADMAP.md`](Halt/ROADMAP.md)
+for the full plan.
+
 ## 🚧 Remaining work
 
-### 1. Halting-problem undecidability for `Turing.SingleTapeTM`
-
-In progress in `Halt/` via **Path C** — a self-contained Cantor
-diagonalisation against a universal `SingleTapeTM` built inside this
-repo. See [`Halt/ROADMAP.md`](Halt/ROADMAP.md) for the full plan.
-
-Current state:
-* `Halt.Diagonal` — model-independent diagonal kernel ✅
-* `Halt.Basic` — `HaltDecidable` predicate ✅
-* Phase 1 (`Halt.TMCode`) — normalised TM representation ✅
-* Phase 2 (`Halt.Encoding`) — Gödel numbering ✅ mostly
-* Phase 3 — universal `SingleTapeTM` 🚧 not started (~2000–4000 LoC)
-* Phase 4 — self-application diagonal closing `halt_undecidable` 🚧
-
-Mathlib's
-[`Mathlib.Computability.Halting.halting_problem`](https://leanprover-community.github.io/mathlib4_docs/Mathlib/Computability/Halting.html)
-proves the undecidability of halting for `Nat.Partrec.Code`, not for
-cslib's `Turing.SingleTapeTM`. A simulation bridge between the two
-would also work and is a viable alternative (Path A in
-`Halt/ROADMAP.md`).
-
-### 2. HUM normalisation
+### 1. HUM normalisation
 
 `halts_iff_pcp` carries the side conditions `NoBlankWrites tm` and
 `NoLeftBoundary tm w`. These are real restrictions: a generic TM may
@@ -212,15 +209,21 @@ to introduce a sentinel marker, refuse to overwrite the blank
 (`NoBlankWrites`), and refuse to move off the sentinel
 (`NoLeftBoundary`). Estimated ~500–1000 LoC; deferred.
 
+### 2. HALT_TM (pair-form) undecidability
+
+The current `halt_undecidable` is for the *self-halt* form `K`. To
+extend to the pair-form `HALT_TM = {(c, w) | c.toTM halts on w}`, the
+cleanest route is `K ≤_m HALT_TM` via a `dupTM`-style construction that
+on input `c` produces `encodePair c c`. ~200 LoC.
+
 ## Estimated scope
 
 The Coq counterpart in
 [`coq-library-undecidability`](https://github.com/uds-psl/coq-library-undecidability)
 runs to roughly 1500 lines for the `Halt ≤_m MPCP ≤_m PCP` chain alone.
 Our Lean development reaches ~4200 lines for the same content (more
-verbose decidability/structural plumbing). HUM normalisation would add
-~500–1000 LoC; halting-problem undecidability (Path C, in `Halt/`) is
-estimated at ~2650–5500 LoC — see `Halt/ROADMAP.md`.
+verbose decidability/structural plumbing). The Halt-undecidability
+module adds ~810 LoC. HUM normalisation would add another ~500–1000 LoC.
 
 ## Build invariant
 

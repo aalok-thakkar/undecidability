@@ -92,40 +92,55 @@ A function `codeOf : SingleTapeTM Bool → TMCode` and the lemma
 `Halts (codeOf tm).toTM w ↔ Halts tm w`. Uses `Fintype.equivFin` to
 rename the state set through `Fin (Fintype.card tm.State)`.
 
-### Phase 4 — `Halt.Undecidable` (~150 LoC)
-1. Define `diagTM (D)` via `compComputer dupTM (compComputer D invertTM)`.
-2. Prove the chain of equivalences:
-   `Halts (diagTM D) c
-     ↔ Halts (compComputer D invertTM) (encodePair c c)        -- via dupTM
-     ↔ Halts invertTM [false]                                  -- via D, decider
-     ↔ True`
-   And similarly the "doesn't halt" path leads to `[true]` and `¬ True`.
-3. Apply to `c_diag := encodeTMCode (codeOf (diagTM D))`.
-4. Use `halt_diag_contradiction` to close.
+### Phase 4 — `Halt.Undecidable` (~370 LoC)
+Done via an **inlined** `diagTM` (state `D.State ⊕ DiagPost`, not a
+`compComputer` indirection) — sidesteps `dupTM` (Phase 3c) entirely by
+targeting the *self-halt* problem `K = { c | c.toTM halts on encodeTMCode c }`
+instead of the pair-form `HALT_TM`. The decider's input is just
+`encodeTMCode c` (no need to duplicate it).
 
-## Total estimate
+Proof outline:
+1. `diagTM D`: simulates `D`; when `D` would halt, transitions to a
+   "reading" state that inspects the head symbol of `D`'s output —
+   if `true`, enters an infinite "loop" state; otherwise halts.
+2. `step_liftCfg` + `trace_liftCfg`: lift `D`-traces into `diagTM`-traces
+   via `liftCfg ⟨none, t⟩ = ⟨some (.inr .reading), t⟩` (the halt of D
+   becomes the seam).
+3. `diagTM_halts_of_outputs_false`: backward direction. Lift D's
+   output `[false]` trace, take one more step from `.reading` (head
+   reads `some false`) to `none`. Halts.
+4. `diagTM_loops_of_outputs_true`: forward direction via deterministic
+   diamond. From `.reading` reading `some true`, the next step is
+   `.loop`. `.loop` is closed under stepping. Any halt trace would have
+   to reach `none` from `.loop`, impossible.
+5. `halt_undecidable`: case-split on `Halts c_diag.toTM (encodeTMCode c_diag)`;
+   each case derives a contradiction via the two lemmas above and
+   `halts_codeOf_iff`.
 
-Phase 3a: ~50
-Phase 3b: ~30
-Phase 3c: ~200
-Phase 3d: ~50
-Phase 3e: ~200
-Phase 4: ~150
+## Total estimate (revised)
 
-Total: ~680 LoC — about **5× smaller** than the universal-TM route.
+* Phase 3a (`Halt.Pair`): ~50 LoC
+* Phase 3b (refined `IsHaltDecider` / `IsSelfHaltDecider`): ~30 LoC
+* Phase 3c (`Halt.Helpers.DupTM`): **skipped** (sidestepped by targeting `K` instead of `HALT_TM`)
+* Phase 3d (`Halt.Helpers.invertTM`): ~140 LoC (turned out to be unused by Phase 4 once `diagTM` was inlined, but still useful as scaffolding/documentation)
+* Phase 3e (`Halt.CodeOf`): ~220 LoC
+* Phase 4 (`Halt.Undecidable`): ~370 LoC
+
+Total: ~810 LoC — about 3× smaller than the textbook universal-TM route
+(2000–4000 LoC).
 
 ## Status
 
 * `Halt.Diagonal` ✅
-* `Halt.Basic` (loose form) ✅; strict `IsHaltDecider` 🚧
+* `Halt.Basic` (loose form + strict `IsHaltDecider`) ✅
 * Phase 1 (`Halt.TMCode`) ✅
 * Phase 2 (`Halt.Encoding`) ✅ (deferred pointwise lookup)
-* Phase 3a (`Halt.Pair`) 🚧
-* Phase 3b (refined `Halt.Basic`) 🚧
-* Phase 3c (`Halt.Helpers.DupTM`) 🚧
-* Phase 3d (`Halt.Helpers.InvertTM`) 🚧
-* Phase 3e (`Halt.CodeOf`) 🚧
-* Phase 4 (`Halt.Undecidable`) 🚧
+* Phase 3a (`Halt.Pair`) ✅
+* Phase 3b (`IsHaltDecider` in `Halt.Basic`) ✅
+* Phase 3c (`Halt.Helpers.DupTM`) — skipped (not needed for K-undecidability)
+* Phase 3d (`Halt.Helpers.invertTM`) ✅
+* Phase 3e (`Halt.CodeOf`) ✅
+* Phase 4 (`Halt.Undecidable`) ✅ — **`halt_undecidable` proved**
 
 ## Build invariant
 
