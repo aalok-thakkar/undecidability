@@ -98,7 +98,31 @@ For comparison, a textbook universal-TM construction (which would
 generalise to pair-form `HALT_TM` directly) is typically estimated at
 2000–4000 LoC.
 
-## What's deferred
+## Rice's theorem — in progress
+
+Files under [`Rice/`](Rice/):
+
+* `Rice.Basic` ✅ — definitions: `SemHalt`, `BehaviourEquiv`,
+  `IsSemantic`, `IsPropDecider`, `NonTrivial`, and the semantic-set
+  re-packaging (`BehaviourClassProp`, `liftClassProp`).
+* `Rice.TrivialTMs` ✅ — concrete witnesses `tm_alwaysHalt` (halts on
+  every input) and `tm_loop` (loops on every input), with
+  `SemHalt = univ` and `SemHalt = ∅` respectively.
+* `Rice.Extender` 🚧 — the construction `riceTM : TMCode →
+  SingleTapeTM Bool → SingleTapeTM Bool` such that, for any `c` and
+  target `tm`:
+    `SemHalt (riceTM c tm) = SemHalt tm`        if `c.toTM` halts on
+                                                  `encodeTMCode c`,
+    `SemHalt (riceTM c tm) = ∅`                  otherwise.
+  Requires preserving the input through a halt-test on `c`, which over
+  the Bool alphabet means careful tape-region management. Estimated
+  ~500–700 LoC.
+* `Rice.Theorem` 🚧 — derives Rice's theorem (predicate form) by
+  reducing K-decidability to `IsPropDecider`-decidability via
+  `riceTM`. Semantic-set form follows immediately from the predicate
+  form plus `liftClassProp_isSemantic`. Estimated ~100–150 LoC.
+
+## Other deferred items
 
 * **`HALT_TM` (pair-form) undecidability.** Follows from
   `halt_undecidable` via `K ≤_m HALT_TM` (a small `dupTM`-style
