@@ -1,40 +1,72 @@
 # Undecidability
 
-A Lean 4 formalisation of the standard reduction chain
+A Lean 4 formalisation of three classical undecidability results,
+linked by reductions, all built on top of cslib's
+[`Turing.SingleTapeTM`](https://github.com/leanprover/cslib):
+
+| Library | Top-level theorem | Status |
+|---|---|---|
+| **`PCP/`** | `halts_iff_pcp : Halts tm w ↔ HasSolution (mpcpToPcp …)` | ✅ complete |
+| **`CFG/`** | `hasSolution_iff_intersectionNonempty : HasSolution P ↔ ∃ w, w ∈ L(topCFG) ∩ L(botCFG)` | ✅ complete |
+| **`Halt/`** | `halt_undecidable : ¬ ∃ computable decider for Halts` | 🚧 in progress (Path C, Phase 1 of 4) |
+
+The proof contains **no `sorry`** anywhere and is verified against
+`leanprover/lean4:v4.29.0-rc4` (see `lake-manifest.json`).
+`lake build` is clean (2185 jobs, no warnings).
+
+## What is proved end-to-end
+
+Composing `PCP/` and `CFG/`, this repository proves the entire reduction
+chain
 
 ```
-Halt ≤_m MPCP ≤_m PCP
+Halt  ≤_m  MPCP  ≤_m  PCP  ≤_m  CFG-Intersection-Nonempty
 ```
 
-connecting the Halting Problem to the Post Correspondence Problem (PCP).
-The top-level theorem (`halts_iff_pcp` in `PCP/Reductions/HaltToPCP.lean`)
-shows that
+as iffs under HUM (Hopcroft–Ullman–Motwani) side conditions:
 
-  `Halts tm w ↔ HasSolution (mpcpToPcp (startTile tm w) (haltTiles tm))`
+```lean
+theorem halts_iff_pcp (tm : SingleTapeTM Symbol) (w : List Symbol)
+    (h_nbw : NoBlankWrites tm) (h_nlb : NoLeftBoundary tm w) :
+    Halts tm w ↔
+    HasSolution (mpcpToPcp (startTile tm w) (haltTiles tm))
 
-for any single-tape Turing machine `tm` and input `w` satisfying the
-Hopcroft–Ullman–Motwani side conditions `NoBlankWrites` and
-`NoLeftBoundary`.
+theorem hasSolution_iff_intersectionNonempty (P : Stack α) :
+    HasSolution P ↔
+    ∃ w, w ∈ (topCFG P).language ∧ w ∈ (botCFG P).language
+```
 
-## What this repository does *not* prove
+Composed, an explicit computable function `f` produces a pair of
+context-free grammars `(G₁, G₂)` from a Turing machine + input, such
+that `Halts tm w ↔ L(G₁) ∩ L(G₂) ≠ ∅`. Both reductions are many-one and
+both directions of each iff are proved.
 
-To conclude "PCP is undecidable" from `halts_iff_pcp`, two more pieces
-are required, neither of which is in this repository:
+## What this repository does *not* yet prove
 
-1. A proof that `Halts` for cslib's `Turing.SingleTapeTM` is undecidable.
-   Mathlib *does* prove the Halting Problem
+The reductions are closed as iffs; the missing piece for an end-to-end
+**undecidability** statement is:
+
+1. **Halting-problem undecidability for cslib's `Turing.SingleTapeTM`.**
+   This is the subject of the new `Halt/` library. The kernel diagonal
+   argument is in (`Halt/Diagonal.lean`) and Phase 1 of the chosen
+   construction (Path C — direct universal `SingleTapeTM` +
+   self-application) is in (`Halt/TMCode.lean`). Phases 2–4 are
+   substantial future work; see `Halt/ROADMAP.md` for the plan.
+
+   Note that Mathlib *does* prove the Halting Problem
    ([`Mathlib.Computability.Halting.halting_problem`](https://leanprover-community.github.io/mathlib4_docs/Mathlib/Computability/Halting.html)),
    but for `Nat.Partrec.Code` (partial recursive function codes) rather
-   than `Turing.SingleTapeTM`. Bridging the two — showing that cslib's
-   `SingleTapeTM` can simulate `Nat.Partrec.Code` (or vice versa) — is a
-   substantial development of its own and is left for future work.
-2. **HUM normalisation** — a construction lifting the side conditions
-   `NoBlankWrites` and `NoLeftBoundary` to an arbitrary TM (the standard
-   sentinel-shift construction).
+   than `Turing.SingleTapeTM`. Reusing it would require a simulation
+   bridge — see `Halt/ROADMAP.md` Path A for that alternative.
 
-What we prove here is the reduction chain itself, which is the
-mathematical core of the standard PCP-undecidability argument. See
-`ROADMAP.md` for the dependency tree.
+2. **HUM normalisation** — a construction `(tm, w) ↦ (tm', w')`
+   producing an equivalent TM satisfying `NoBlankWrites tm'` and
+   `NoLeftBoundary tm' w'`. The standard sentinel-shift construction
+   is straightforward but bulky (~500–1000 LoC); deferred to a future
+   `PCP.Normalize` module.
+
+Once (1) and (2) land, the iff chain immediately yields concrete
+undecidability theorems for PCP and CFG-intersection-emptiness.
 
 ## Conventions
 
@@ -47,46 +79,86 @@ to the standard `NoBlankWrites` (no blank symbol written).
 The development uses [`cslib`](https://github.com/leanprover/cslib)'s
 `Turing.SingleTapeTM` for the Turing-machine machinery and follows
 cslib's conventions (module-style headers, `public import`,
-`@[expose] public section`). The proof contains **no `sorry`** and is
-verified against `leanprover/lean4:v4.29.0-rc4` (see `lake-manifest.json`).
+`@[expose] public section`).
 
 ## Project layout
 
 ```
-PCP/
-  Basic.lean                 -- Core types: Word, Tile, Stack; concatenations
-                                tau1, tau2; the `HasSolution` predicate.
-  MPCP.lean                  -- The MPCP variant `MHasSolution`.
-  Reduction.lean             -- MPCP ≤_m PCP. Alphabet extension, interleaving,
-                                tile classes, `mpcpToPcp`, and the complete
-                                `mpcp_iff_pcp`.
-  Halt.lean                  -- The halting predicate `Halts` for cslib's
-                                `Turing.SingleTapeTM`.
+PCP/                            ← Halt ≤_m MPCP ≤_m PCP chain (complete)
+  Basic.lean                    -- core types: Word, Tile, Stack;
+                                   tau1, tau2; HasSolution predicate
+  MPCP.lean                     -- MPCP variant: MHasSolution
+  Reduction.lean                -- MPCP ≤_m PCP: full mpcp_iff_pcp
+  Halt.lean                     -- Halts predicate for SingleTapeTM
   Reductions/
-    HaltToMPCP.lean            -- Halt ≤_m MPCP construction and proofs.
-    HaltToPCP.lean             -- `halts_iff_pcp`: composition of
-                                Halt ≤_m MPCP with MPCP ≤_m PCP.
-PCP.lean                     -- Library root.
-Main.lean                    -- Executable entry point.
-ROADMAP.md                   -- Detailed proof plan and external deps.
+    HaltToMPCP.lean             -- Halt ≤_m MPCP construction + proofs
+    HaltToPCP.lean              -- halts_iff_pcp: composition
+
+CFG/                            ← PCP ≤_m CFG-Intersection-Nonempty (complete)
+  Basic.lean                    -- IntersectionEmpty / IntersectionNonempty
+  PcpReduction.lean             -- the full reduction iff
+
+Halt/                           ← Halting-Problem undecidability (in progress)
+  Diagonal.lean                 -- Cantor + abstract halting contradiction
+  Basic.lean                    -- HaltDecidable predicate
+  TMCode.lean                   -- normalised TM rep (Bool alphabet,
+                                   Fin (n+1) states) — Phase 1 of Path C
+  ROADMAP.md                    -- Path C plan (4 phases)
+
+PCP.lean / CFG.lean / Halt.lean  ← library roots
+Main.lean                        ← executable entry point
+ROADMAP.md                       ← reduction-chain roadmap + external deps
 ```
 
-## Status
+## Detailed status
 
-| Component                                                  | Status                |
-|------------------------------------------------------------|-----------------------|
-| Core PCP / MPCP API                                        | ✅ complete           |
-| `MPCP ≤_m PCP` (full `mpcp_iff_pcp`)                       | ✅ complete           |
-| `Halts` predicate for `SingleTapeTM`                       | ✅ complete           |
-| `Halt ≤_m MPCP`: tile set + HUM refactor (`NoLeftBoundary`)  | ✅ complete           |
-| `Halt ≤_m MPCP`: forward direction (`Halts → MHasSolution`)  | ✅ complete           |
-| `Halt ≤_m MPCP`: backward direction (`MHasSolution → Halts`) | ✅ complete           |
-| Canonical `halt_le_mpcp` (`Halts ↔ MHasSolution`)            | ✅ complete           |
-| `halts_iff_pcp` (composition `Halts ↔ HasSolution …`)      | ✅ complete           |
-| Halting-problem undecidability for `SingleTapeTM`          | 🚧 Mathlib proves it for `Nat.Partrec.Code`; bridge to cslib's `SingleTapeTM` is future work |
-| HUM normalisation (lifting `NoBlankWrites`/`NoLeftBoundary`)| 🚧 future work        |
+### `PCP/` — `Halt ≤_m MPCP ≤_m PCP` (complete)
 
-## What is proved
+| Component                                                  | Status      |
+|------------------------------------------------------------|-------------|
+| Core PCP / MPCP API                                        | ✅ complete |
+| `MPCP ≤_m PCP` (full `mpcp_iff_pcp`)                       | ✅ complete |
+| `Halts` predicate for `SingleTapeTM`                       | ✅ complete |
+| `Halt ≤_m MPCP`: tile set + HUM refactor (`NoLeftBoundary`)| ✅ complete |
+| `Halt ≤_m MPCP`: forward direction                         | ✅ complete |
+| `Halt ≤_m MPCP`: backward direction                        | ✅ complete |
+| Canonical `halt_le_mpcp` (`Halts ↔ MHasSolution`)          | ✅ complete |
+| `halts_iff_pcp` (composition `Halts ↔ HasSolution …`)      | ✅ complete |
+
+### `CFG/` — `PCP ≤_m CFG-Intersection-Nonempty` (complete)
+
+| Component                                                  | Status      |
+|------------------------------------------------------------|-------------|
+| `IntersectionEmpty` / `IntersectionNonempty` predicates    | ✅ complete |
+| Forward (PCP solution → word in both languages)            | ✅ complete |
+| Backward (word in both languages → PCP solution)           | ✅ complete |
+| `Form`-invariant proof of language characterisation        | ✅ complete |
+| `inl`/`inr` disjointness lemma                             | ✅ complete |
+| Top-level `hasSolution_iff_intersectionNonempty`           | ✅ complete |
+
+Uses Mathlib's `ContextFreeGrammar`; cslib has no CFG framework.
+
+### `Halt/` — Halting-Problem undecidability (in progress, Path C)
+
+| Phase / Component                                          | Status              |
+|------------------------------------------------------------|---------------------|
+| `Halt.Diagonal` — Cantor + abstract halting contradiction  | ✅ complete         |
+| `Halt.Basic` — `HaltDecidable` predicate                   | ✅ complete         |
+| **Phase 1**: `Halt.TMCode` (normalised TM representation)  | ✅ complete         |
+| **Phase 2**: Gödel numbering (`encodeTMCode`)              | 🚧 not yet started  |
+| **Phase 3**: Universal `SingleTapeTM` (the bulk of Path C) | 🚧 not yet started  |
+| **Phase 4**: Self-application diagonal + final theorem     | 🚧 not yet started  |
+
+See `Halt/ROADMAP.md` for the full plan. Total estimated scope:
+~2650–5500 LoC across many sessions (Phase 3 dominates).
+
+### External dependencies (out of scope for this repo)
+
+| Dependency                                                   | Status              |
+|--------------------------------------------------------------|---------------------|
+| HUM normalisation (lifting `NoBlankWrites`/`NoLeftBoundary`) | 🚧 future work      |
+
+## What is proved (details)
 
 ### `MPCP ≤_m PCP` — `PCP/Reduction.lean`
 
@@ -134,7 +206,7 @@ front of `A` per TM step.
 
 | Lemma                                  | Role                                             |
 |----------------------------------------|--------------------------------------------------|
-| `mem_haltTiles_top`                      | Identify each tile in `haltTiles` by its constructor |
+| `mem_haltTiles_top`                    | Identify each tile in `haltTiles` by its constructor |
 | `copy_prefix_forced`                   | Force `copyTile`s on a `liftTape`-prefix         |
 | `transition_forced`                    | Force the transition tile after a state marker   |
 | `copy_prefix_forced_state_lead`        | Strip copies up to a state marker (non-left)     |
@@ -145,7 +217,7 @@ front of `A` per TM step.
 | `starts_with_stepTilesRightBoundary`   | Backward step, right-move, `t.right = []`        |
 | `starts_with_stepTilesLeftInterior`    | Backward step, left-move, `t.left ≠ []`          |
 | `backward_aux`                         | Main strong-induction driver (strong hypothesis) |
-| `halt_le_mpcp_strong`                    | Strong-A top-level theorem                       |
+| `halt_le_mpcp_strong`                  | Strong-A top-level theorem                       |
 
 The left-boundary sub-case is *removed* by the HUM refactor: the
 `NoLeftBoundary` constraint ensures no reachable cfg ever invokes a
@@ -162,8 +234,7 @@ mid-stream in `A`, it pushes an extra `initCfg` (with a `refl` chain)
 onto the queue, alongside the natural `stepResult` advancement. The
 right-boundary alternative `rightMoveTile` path is ruled out by
 `tau1_no_state_marker_then_sharp`, a structural property showing that
-`tau1 A` never contains `↟ₛq :: # :: …` as a sublist (no tile's top has
-`↟ₛq` followed by `#`, and no top ends with `↟ₛq`).
+`tau1 A` never contains `↟ₛq :: # :: …` as a sublist.
 
 ### `Halt ≤_m PCP` — `PCP/Reductions/HaltToPCP.lean`
 
@@ -175,45 +246,66 @@ theorem halts_iff_pcp (tm : SingleTapeTM Symbol) (w : List Symbol)
   (halt_le_mpcp tm h_nbw w h_nlb).trans (mpcp_iff_pcp _ _)
 ```
 
-The transitive composition of the two reductions: `Halts` and PCP
-solvability of the explicit, computably constructed instance
-`mpcpToPcp (startTile tm w) (haltTiles tm)` are equivalent.
+### `PCP ≤_m CFG-Intersection-Nonempty` — `CFG/PcpReduction.lean`
 
-## Next steps
+For each tile `t ∈ P`, build two rules over alphabet `α ⊕ Tile α`:
 
-The reduction chain is closed; what remains for a complete PCP-undecidability
-proof in Lean 4 is external to this repository:
+| Grammar  | Recursive rule                       | Base rule               |
+|----------|--------------------------------------|-------------------------|
+| `topCFG` | `S → t.top.inl ++ S ++ [.inr t]`     | `S → t.top.inl ++ [.inr t]` |
+| `botCFG` | `S → t.bot.inl ++ S ++ [.inr t]`     | `S → t.bot.inl ++ [.inr t]` |
 
-1. **Halting-problem undecidability for `SingleTapeTM`.** Mathlib already
-   proves the Halting Problem for partial recursive function codes
-   ([`Mathlib.Computability.Halting.halting_problem`](https://leanprover-community.github.io/mathlib4_docs/Mathlib/Computability/Halting.html):
-   `¬ ComputablePred fun c => (eval c n).Dom`).
-   What's needed to apply this here is a bridge between cslib's
-   `Turing.SingleTapeTM` and `Nat.Partrec.Code` — i.e., a proof that
-   `SingleTapeTM` can simulate every partial recursive function (or vice
-   versa). Mathlib's `Computability.TMToPartrec` provides such a bridge
-   for *its own* TM model; an analogous bridge for cslib's `SingleTapeTM`
-   would close the gap.
-
-2. **HUM normalisation.** A construction
-   `tm ↦ (tm', w')` producing an equivalent machine satisfying both
-   `NoBlankWrites` and `NoLeftBoundary`. The standard sentinel-shift
-   technique is straightforward but bulky (~500–1000 LoC); left for a
-   future `PCP.Normalize` module.
-
-See `ROADMAP.md` for further details.
-
-## CFG-intersection-emptiness reduction
-
-A companion library [`CFG/`](CFG/) contains the standard Hopcroft–Ullman
-reduction
+A derivation traces a tile sequence `[t₁, …, t_k]` and emits
+`(tau_proj A).map .inl ++ A.reverse.map .inr`. The reverse order of
+markers forces both grammars to commit to the same sequence; the
+`.inl`/`.inr` alphabet split lets us recover the PCP witness uniquely
+via `list_inl_inr_split`.
 
 ```lean
 theorem hasSolution_iff_intersectionNonempty (P : Stack α) :
-    HasSolution P ↔ ∃ w, w ∈ (topCFG P).language ∧ w ∈ (botCFG P).language
+    HasSolution P ↔
+    ∃ w, w ∈ (topCFG P).language ∧ w ∈ (botCFG P).language
 ```
 
-connecting PCP to *CFG-intersection-emptiness* — given two context-free
-grammars `G₁` and `G₂`, is `L(G₁) ∩ L(G₂) = ∅`? With this reduction, if
-PCP is undecidable then CFG-intersection-emptiness is too. The library
-uses Mathlib's `ContextFreeGrammar` (cslib has no CFG framework).
+### `Halt.Diagonal` — the kernel of the halting-problem proof
+
+Model-independent diagonalisation, no Turing machines:
+
+```lean
+theorem cantor_diag (f : α → α → Bool) :
+    ∃ g : α → Bool, ∀ a, g ≠ f a
+
+theorem not_surjective_cantor (f : α → α → Bool) :
+    ¬ Function.Surjective f
+
+theorem halt_diag_contradiction (H : α → α → Bool)
+    (d : α) (hd : (! H d d) = H d d) : False
+```
+
+The last theorem is the purely logical heart of the standard halting
+argument: any `H : α → α → Bool` admitting a `d` with `! H d d = H d d`
+collapses to `False`. Producing the witness `d` for a concrete
+computation model is the substantive work of `Halt/` Phases 2–4.
+
+### `Halt.TMCode` — Phase 1 of the universal-TM construction
+
+A normalised TM record (`Bool` alphabet, `Fin (numStates + 1)` states,
+explicit transition table) with an interpretation function
+`tmCodeToTM : TMCode → SingleTapeTM Bool`. This is the canonical
+representation that a universal `SingleTapeTM` will eventually
+consume off its input tape.
+
+## Next steps
+
+1. **Phase 2 of `Halt/`** — Gödel numbering of `TMCode` as `List Bool`.
+2. **Phase 3 of `Halt/`** — universal `SingleTapeTM` (the bulk of the
+   work, ~2000–4000 LoC).
+3. **Phase 4 of `Halt/`** — self-application diagonal closing
+   `halt_undecidable`.
+4. **HUM normalisation** — separate workstream, lifts the side
+   conditions to a generic TM.
+
+Once 1–3 land, the iff chain `Halt ≤_m MPCP ≤_m PCP ≤_m CFG-int` immediately yields
+concrete undecidability theorems for both PCP and CFG-intersection-emptiness.
+
+See `Halt/ROADMAP.md` and `ROADMAP.md` for full dependency trees.
