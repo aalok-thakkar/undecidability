@@ -55,7 +55,7 @@ ROADMAP.md                   -- Detailed proof plan and next steps.
 | `Lu ≤_m MPCP`: forward direction (`Halts → MHasSolution`)  | ✅ complete           |
 | `Lu ≤_m MPCP`: backward direction (strong-A form)          | ✅ complete           |
 | `lu_le_mpcp` (strong-A `Iff`)                              | ✅ complete           |
-| `Halts ↔ MHasSolution` (canonical `Iff` with start tile)   | 🚧 forward only       |
+| `Halts ↔ MHasSolution` (canonical `Iff` with start tile)   | ✅ complete           |
 
 ## What is proved
 

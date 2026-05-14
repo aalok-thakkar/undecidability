@@ -175,7 +175,26 @@ The fix: skip the halted-cfg peeling entirely. In `backward_aux`, when
 need to look at `A` at all. The halt-now sub-case is handled in the
 running-cfg branch by producing one TM step via `tm_step_running`.
 
-## 🚧 Remaining work — canonical `Halts ↔ MHasSolution` iff
+## ✅ Canonical `Halts ↔ MHasSolution` iff — COMPLETE
+
+The canonical iff is now closed (`halts_iff_mhasSolution`):
+
+```lean
+theorem halts_iff_mhasSolution (tm : SingleTapeTM Symbol) (w : List Symbol)
+    (h_nbw : NoBlankWrites tm) (h_nlb : NoLeftBoundary tm w) :
+    Halts tm w ↔ MHasSolution (startTile tm w) (luTiles tm)
+```
+
+The proof threads a chain-tracked cfg queue through `backward_aux_weak`.
+When the `startTile` appears mid-stream in `A`, it pushes an extra
+`initCfg` cfg onto the queue (in addition to the natural `stepResult`);
+each queued cfg carries its own `ReflTransGen` chain from `initCfg`.
+The right-boundary alternative `rightMoveTile` path is ruled out by
+`tau1_no_state_marker_then_sharp`, a structural property showing that
+`tau1 A` never contains `↟ₛq :: # :: …` as a sublist (no tile's top has
+`↟ₛq` followed by `#`, and no top ends with `↟ₛq`).
+
+## Old plan / archive
 
 The full canonical iff is:
 
