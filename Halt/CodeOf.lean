@@ -10,7 +10,7 @@ public import Halt.Basic
 @[expose] public section
 
 /-!
-# `codeOf` — embedding any `SingleTapeTM Bool` into `TMCode` (Phase 3e)
+# `codeOf` — embedding any `SingleTapeTM Bool` into `TMCode`
 
 A `TMCode` is a `SingleTapeTM Bool` whose state set is fixed to
 `Fin (n + 1)`. To form the diagonal `c_diag := codeOf diagTM`, we need
@@ -23,10 +23,16 @@ The construction picks the unique `n` with `n + 1 = Fintype.card tm.State`
 yields a `cfgEquiv : tm.Cfg ≃ (codeOf tm).toTM.Cfg` that commutes with
 `step` in both directions, hence preserves `Halts`.
 
-The key correctness theorem is
+## Key theorem
 
-    Halts (codeOf tm).toTM w ↔ PCP.Halts tm w
--/
+```lean
+theorem halts_codeOf_iff (tm : SingleTapeTM Bool) (w : List Bool) :
+    PCP.Halts (codeOf tm).toTM w ↔ PCP.Halts tm w
+```
+
+This is what makes the self-application `c_diag = codeOf (diagTM D)`
+work in `Halt.Undecidable`: `c_diag.toTM` halts on `encodeTMCode c_diag`
+iff `diagTM D` does. -/
 
 namespace Halt
 

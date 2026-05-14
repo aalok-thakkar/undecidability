@@ -1,146 +1,113 @@
-# Halt roadmap
+# Halt — retrospective and construction notes
 
-Plan for proving the Halting Problem undecidable for cslib's
-`Turing.SingleTapeTM`.
+The halting-problem undecidability proof for cslib's
+`Turing.SingleTapeTM Bool`, completed in this directory. This document
+records the construction; for the top-level chain see [`../README.md`](../README.md).
 
-## ✅ Done
+## What is proved
 
-### `Halt.Diagonal`
-The pure-mathematical kernel of the diagonal argument — Cantor's
-theorem (`not_surjective_cantor`), the diagonal-disagreement lemma
-(`cantor_diag`), and the abstract self-referential contradiction
-(`halt_diag_contradiction`). No Turing machines, no computability —
-just `Bool` and function equality. This file does not change as the
-rest of the library is built; it's the once-and-for-all logical core.
-
-### `Halt.Basic`
-The decision predicate `HaltDecidable Symbol`. We are switching from
-the loose `decide : SingleTapeTM Symbol → List Symbol → Bool` form
-(which is vacuously true classically) to the strict
-`IsHaltDecider (D : SingleTapeTM Bool)` form below, where `D` is a
-*concrete TM* that decides halting via its output tape.
-
-### Phase 1 — `Halt.TMCode` (normalised TM representation)
-Fix the alphabet `Symbol := Bool` and the state set to `Fin (n+1)`.
-* `TMCode` record.
-* `tmCodeToTM : TMCode → SingleTapeTM Bool`.
-* Simulation `simp` lemmas.
-
-### Phase 2 — `Halt.Encoding` (Gödel numbering)
-Self-delimiting bit-encoding of `TMCode` as `List Bool`:
-* `encodeNat`/`decodeNat` (unary), `encodeFin`/`decodeFin`,
-  `encodeBool`/`decodeBool`, `encodeOptBool`, `encodeOptDir`,
-  `encodeStmt`, `encodeOptFin`, `encodeTrEntry`, `encodeTrEntries`,
-  `encodeTrTable`, `encodeTMCode`/`decodeTMCode`, with round-trip
-  lemmas at every layer.
-* The pointwise transition-lookup `trToList_getElem` is deferred
-  (needed for Phase 4 injectivity, not for the diagonal).
-
-## 🚧 To do — composition-based diagonal (revised plan)
-
-The textbook construction builds a universal `SingleTapeTM`
-(~2000–4000 LoC). We **don't need that.** The diagonal only needs:
-
-1. To assume a hypothetical decider `D : SingleTapeTM Bool` (as a
-   black box, satisfying `IsHaltDecider`).
-2. To build `diagTM := dupTM ⋙ D ⋙ invertTM`, where:
-   * `dupTM` is a concrete TM that on input `c` writes
-     `encodePair c c`.
-   * `invertTM` is a concrete TM that loops on `[true]` and halts on
-     `[false]`.
-   * `⋙` is cslib's `compComputer` (composition).
-3. To express `diagTM` as a `TMCode` via a generic
-   `codeOf : SingleTapeTM Bool → TMCode` (state renaming through a
-   `Fintype.equivFin` bijection).
-4. To apply `Halt.Diagonal.halt_diag_contradiction` to the diagonal
-   point `c_diag := encodeTMCode (codeOf diagTM)`.
-
-The hypothetical `D` does the heavy lifting of "interpret a TMCode";
-since we never construct it, we never build a universal TM. We only
-build the two concrete helper TMs (`dupTM` and `invertTM`) and the
-generic `codeOf` operation.
-
-### Phase 3a — `Halt.Pair`: tape encoding of pairs (~50 LoC)
-* `encodePair : List Bool → List Bool → List Bool` —
-  `encodeNat |w| ++ w ++ v` is enough: the unary length prefix
-  delimits the first half.
-* `decodePair : List Bool → Option (List Bool × List Bool)`.
-* Round-trip lemma.
-
-### Phase 3b — `Halt.Basic`: refined `IsHaltDecider` (~30 LoC)
 ```lean
-def IsHaltDecider (D : SingleTapeTM Bool) : Prop :=
-  ∀ (c : Halt.TMCode) (w : List Bool),
-    Outputs D (encodePair (encodeTMCode c) w)
-      (if PCP.Halts c.toTM w then [true] else [false])
+theorem halt_undecidable :
+    ¬ ∃ D : SingleTapeTM Bool, IsSelfHaltDecider D
 ```
 
-### Phase 3c — `Halt.Helpers.DupTM` (~200 LoC)
-Concrete `SingleTapeTM Bool` (small explicit state set,
-`Fin k` for k≈5–10) that on input `w` halts with output
-`encodePair w w`. Correctness lemma:
-`Outputs dupTM w (encodePair w w)`.
+— there is no `SingleTapeTM Bool` `D` that decides the self-halt
+problem `K = { c : TMCode | c.toTM halts on encodeTMCode c }` by
+emitting `[true]` / `[false]` on its output tape.
 
-### Phase 3d — `Halt.Helpers.InvertTM` (~50 LoC)
-Concrete `SingleTapeTM Bool` (2 states) that on input `[true]` loops
-forever and on input `[false]` halts immediately. Correctness lemmas:
-* `¬ Halts invertTM [true]`.
-* `Outputs invertTM [false] []` (or some chosen empty output).
+## Module layout
 
-### Phase 3e — `Halt.CodeOf` (~150–250 LoC)
-A function `codeOf : SingleTapeTM Bool → TMCode` and the lemma
-`Halts (codeOf tm).toTM w ↔ Halts tm w`. Uses `Fintype.equivFin` to
-rename the state set through `Fin (Fintype.card tm.State)`.
+| Module           | Role                                                                 |
+|------------------|----------------------------------------------------------------------|
+| `Halt.Diagonal`  | Model-independent diagonal kernel (Cantor + abstract contradiction). |
+| `Halt.Basic`     | The three decider predicates: `HaltDecidable`, `IsHaltDecider`, `IsSelfHaltDecider`. |
+| `Halt.TMCode`    | Normalised TM record (alphabet `Bool`, state set `Fin (n + 1)`). |
+| `Halt.Encoding`  | Bit-encoding `encodeTMCode : TMCode → List Bool` with round-trip lemmas. |
+| `Halt.Pair`      | Pair encoding `encodePair u v` (used by `IsHaltDecider`).            |
+| `Halt.Helpers`   | Worked example: `invertTM`, a 2-state TM that halts on `[false]` and loops on `[true]`. (Not on the proof-chain critical path.) |
+| `Halt.CodeOf`    | Generic `codeOf : SingleTapeTM Bool → TMCode` with the bisim theorem `halts_codeOf_iff`. |
+| `Halt.Undecidable` | Inlined diagonal TM `diagTM D` and the final `halt_undecidable`. |
 
-### Phase 4 — `Halt.Undecidable` (~370 LoC)
-Done via an **inlined** `diagTM` (state `D.State ⊕ DiagPost`, not a
-`compComputer` indirection) — sidesteps `dupTM` (Phase 3c) entirely by
-targeting the *self-halt* problem `K = { c | c.toTM halts on encodeTMCode c }`
-instead of the pair-form `HALT_TM`. The decider's input is just
-`encodeTMCode c` (no need to duplicate it).
+## Proof outline
 
-Proof outline:
-1. `diagTM D`: simulates `D`; when `D` would halt, transitions to a
-   "reading" state that inspects the head symbol of `D`'s output —
-   if `true`, enters an infinite "loop" state; otherwise halts.
-2. `step_liftCfg` + `trace_liftCfg`: lift `D`-traces into `diagTM`-traces
-   via `liftCfg ⟨none, t⟩ = ⟨some (.inr .reading), t⟩` (the halt of D
-   becomes the seam).
-3. `diagTM_halts_of_outputs_false`: backward direction. Lift D's
-   output `[false]` trace, take one more step from `.reading` (head
-   reads `some false`) to `none`. Halts.
-4. `diagTM_loops_of_outputs_true`: forward direction via deterministic
-   diamond. From `.reading` reading `some true`, the next step is
-   `.loop`. `.loop` is closed under stepping. Any halt trace would have
-   to reach `none` from `.loop`, impossible.
-5. `halt_undecidable`: case-split on `Halts c_diag.toTM (encodeTMCode c_diag)`;
-   each case derives a contradiction via the two lemmas above and
-   `halts_codeOf_iff`.
+The proof targets the *self-halt* form `K` (single-input decider)
+rather than the pair-form `HALT_TM` (two-input decider). This lets us
+sidestep a separate "input duplicator" TM: the decider's input is just
+`encodeTMCode c`, so the diagonal applies `c` to itself by construction.
 
-## Total estimate (revised)
+### Step 1 — the diagonal TM
 
-* Phase 3a (`Halt.Pair`): ~50 LoC
-* Phase 3b (refined `IsHaltDecider` / `IsSelfHaltDecider`): ~30 LoC
-* Phase 3c (`Halt.Helpers.DupTM`): **skipped** (sidestepped by targeting `K` instead of `HALT_TM`)
-* Phase 3d (`Halt.Helpers.invertTM`): ~140 LoC (turned out to be unused by Phase 4 once `diagTM` was inlined, but still useful as scaffolding/documentation)
-* Phase 3e (`Halt.CodeOf`): ~220 LoC
-* Phase 4 (`Halt.Undecidable`): ~370 LoC
+For any assumed decider `D`, build `diagTM D : SingleTapeTM Bool` with
+state space `D.State ⊕ DiagPost`, where `DiagPost = {reading, loop}`:
 
-Total: ~810 LoC — about 3× smaller than the textbook universal-TM route
-(2000–4000 LoC).
+* `.inl q` states behave exactly like `D` in state `q`.
+* When `D` would halt (`D.tr q a = (stmt, none)`), `diagTM` transitions
+  to `.inr reading` instead.
+* `.inr reading` inspects the current head symbol: `some true` → loop
+  forever (`.inr loop`); `some false` (or blank) → halt.
+* `.inr loop` is a sink — every transition stays in `.inr loop`.
 
-## Status
+### Step 2 — lifting `D`'s traces
 
-* `Halt.Diagonal` ✅
-* `Halt.Basic` (loose form + strict `IsHaltDecider`) ✅
-* Phase 1 (`Halt.TMCode`) ✅
-* Phase 2 (`Halt.Encoding`) ✅ (deferred pointwise lookup)
-* Phase 3a (`Halt.Pair`) ✅
-* Phase 3b (`IsHaltDecider` in `Halt.Basic`) ✅
-* Phase 3c (`Halt.Helpers.DupTM`) — skipped (not needed for K-undecidability)
-* Phase 3d (`Halt.Helpers.invertTM`) ✅
-* Phase 3e (`Halt.CodeOf`) ✅
-* Phase 4 (`Halt.Undecidable`) ✅ — **`halt_undecidable` proved**
+`liftCfg : D.Cfg → (diagTM D).Cfg` sends `D`-running cfgs into `.inl`
+and the `D`-halt cfg `⟨none, t⟩` into the seam `⟨some (.inr reading), t⟩`.
+`step_liftCfg` verifies that one `D`-step commutes; `trace_liftCfg`
+extends this to `ReflTransGen` via `Relation.ReflTransGen.lift`.
+
+### Step 3 — the two behaviour lemmas
+
+* **`diagTM_halts_of_outputs_false`**: backward direction. Lift `D`'s
+  `[false]`-output trace to a `diagTM` trace ending at
+  `⟨some (.inr reading), mk₁ [false]⟩`. One more step lands in
+  `⟨none, _⟩`. Halts.
+
+* **`diagTM_loops_of_outputs_true`**: forward direction. Lift `D`'s
+  `[true]`-output trace, take one step into `.inr loop`. The
+  `loop_persistent` invariant says every reachable cfg from there is
+  in `.inr loop`. The assumed halt trace `(initCfg) →* ⟨none, _⟩`
+  and the lifted-into-loop trace share their start point, so by
+  *deterministic confluence* (`reflTransGen_diamond`) one extends
+  the other. `loop_persistent` rules out the only viable case.
+
+### Step 4 — the diagonal contradiction
+
+`c_diag := codeOf (diagTM D)`. Apply `IsSelfHaltDecider D` at `c_diag`:
+
+* If `c_diag.toTM` halts on `encodeTMCode c_diag`, then `D` outputs
+  `[true]` (by the decider's spec) and `diagTM D` also halts (by
+  `halts_codeOf_iff`) — contradicting `diagTM_loops_of_outputs_true`.
+* If `c_diag.toTM` does not halt, then `D` outputs `[false]` and
+  `diagTM D` halts (by `diagTM_halts_of_outputs_false`) — but then
+  `halts_codeOf_iff` says `c_diag.toTM` halts. Contradiction.
+
+## Scope
+
+| Module             | LoC  |
+|--------------------|------|
+| `Halt.Diagonal`    | ~120 |
+| `Halt.Basic`       | ~95  |
+| `Halt.TMCode`      | ~80  |
+| `Halt.Encoding`    | ~400 |
+| `Halt.Pair`        | ~55  |
+| `Halt.Helpers`     | ~145 |
+| `Halt.CodeOf`      | ~220 |
+| `Halt.Undecidable` | ~310 |
+| **Total**          | **~1425** |
+
+For comparison, a textbook universal-TM construction (which would
+generalise to pair-form `HALT_TM` directly) is typically estimated at
+2000–4000 LoC.
+
+## What's deferred
+
+* **`HALT_TM` (pair-form) undecidability.** Follows from
+  `halt_undecidable` via `K ≤_m HALT_TM` (a small `dupTM`-style
+  reduction). Not pursued here; would extend `IsHaltDecider`'s
+  treatment.
+* **Pointwise `trToList` lookup lemma** in `Halt.Encoding`. Needed for
+  the full left-inverse `decodeTMCode (encodeTMCode c) = some c`. The
+  current proof uses `encodeTMCode` only as an injection; the round-trip
+  follows once the lookup is closed.
 
 ## Build invariant
 

@@ -10,23 +10,18 @@ public import Halt.Basic
 @[expose] public section
 
 /-!
-# Concrete helper Turing machines (Phases 3c–3d)
+# Concrete helper Turing machines
 
-The compositional diagonal needs two concrete `SingleTapeTM Bool`s:
+A worked example: `invertTM`, a 2-state `SingleTapeTM Bool` that halts
+on input `[false]` and loops forever on input `[true]`. Its construction
+illustrates the basic pattern of proving non-halting via a "closed
+loop-state" invariant.
 
-* `invertTM` — on input `[false]`, halts (with output `[false]`); on
-  input `[true]`, loops forever.
-* `dupTM`    — on any input `w`, halts with output
-  `encodePair w w` (the self-pair).
-
-Together with a hypothetical `D : SingleTapeTM Bool` satisfying
-`IsHaltDecider`, the composition `dupTM ∘ D ∘ invertTM` is the diagonal
-TM whose self-application yields a contradiction.
-
-This file defines `invertTM` and proves its correctness. `dupTM` is
-deferred to a follow-up commit (it requires a more elaborate state
-machine for copying the input — see `Halt/ROADMAP.md`).
--/
+`invertTM` was originally intended as a building block for a
+composition-based diagonal (`compComputer D invertTM`) but the final
+proof in `Halt.Undecidable` inlines the diagonal TM directly, so this
+file is not on the proof-chain critical path. It is retained as a
+self-contained example and reference. -/
 
 namespace Halt.Helpers
 

@@ -10,18 +10,19 @@ public import Halt.Encoding
 @[expose] public section
 
 /-!
-# Pair encoding (Phase 3a)
+# Pair encoding
 
-To feed `(c, w)` to a halt-decider over the alphabet `Bool`, we need a
-concrete encoding of a pair of `List Bool`s as a single `List Bool`.
-
-We use a length-prefix scheme:
+A pair-form halt decider takes `(c, w)` as input over alphabet `Bool`.
+This file gives the concrete encoding used by `Halt.IsHaltDecider`:
 
   `encodePair u v = encodeNat u.length ++ u ++ v`
 
-The unary length prefix is self-delimiting, so `decodePair` can read
-`|u|` from the front, then split the rest at position `|u|`.
--/
+The unary length prefix is self-delimiting, so `decodePair` reads
+`|u|` from the front then splits the rest at position `|u|`. The
+round-trip lemma `decodePair_encodePair` makes the encoding injective.
+
+Not used by `Halt.halt_undecidable`, which targets the self-halt form
+`IsSelfHaltDecider` whose input is just `encodeTMCode c`. -/
 
 namespace Halt.Pair
 

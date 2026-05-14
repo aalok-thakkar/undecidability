@@ -10,46 +10,36 @@ public import Halt.TMCode
 @[expose] public section
 
 /-!
-# Gödel numbering (Phase 2 of the universal-TM construction)
+# Gödel numbering of TMCode
 
-A *universal* `SingleTapeTM Bool` has to receive the description of an
-arbitrary TM on its input tape and then simulate it. To make this
-possible we need a concrete, self-delimiting bit-encoding of `TMCode`.
-
-This file builds such an encoding, bottom-up:
-
-* `encodeNat` / `decodeNat`     — unary, self-delimiting (`n` `true`s,
-  then a `false` terminator).
-* `encodeFin` / `decodeFin`     — natural numbers with a bound check.
-* `encodeBool` / `decodeBool`   — single bit.
-* `encodeOption` / `decodeOption` (parameterised) — a `0` byte +
-  payload, or just `1`.
-* `encodeDir`, `encodeStmt` — combinator helpers.
-* `encodeTMCode` / `decodeTMCode` (Phase 2's goal) — the full
-  transition table, with `decode (encode c) = some c`.
+A concrete, self-delimiting bit-encoding `encodeTMCode : TMCode → List Bool`,
+built bottom-up from primitive encoders for `Nat`, `Fin`, `Option Bool`,
+`Option Dir`, `Stmt`, `Option (Fin n)`, transition entries, and the
+full transition table. Each layer has its own round-trip lemma.
 
 We deliberately favour **simplicity over compactness**: every value is
-encoded in unary with explicit terminators, so the universal TM's
-parser is straightforward. Asymptotic blow-up is irrelevant for
-proving undecidability.
+encoded in unary with explicit terminators. Asymptotic blow-up is
+irrelevant for undecidability.
 
 ## Conventions
 
-Throughout the file, every encoder produces a list that is
-*prefix-readable*: there is exactly one way to decode a prefix of its
-output. The decoder is total in the sense that on any `List Bool`
-input it returns `Option (value × rest)`, with `rest` being the
-unconsumed suffix. `decode (encode v ++ rest) = some (v, rest)` is the
-canonical round-trip lemma.
+Every encoder produces a *prefix-readable* list: there is exactly one
+way to decode a prefix of its output. Decoders are total on
+`List Bool` and return `Option (value × rest)`, with `rest` being the
+unconsumed suffix. The canonical round-trip lemma is
 
-## Status
+  `decode (encode v ++ rest) = some (v, rest)`
 
-* `encodeNat`, `decodeNat`, round-trip — ✅
-* `encodeFin`, `decodeFin`, round-trip — ✅
-* `encodeBool` (single bit, no terminator) — ✅
-* Finite enumerations (`Option Bool`, `Option Dir`) — ✅
-* `Stmt`, `Option (Fin n)`, transition entries / table — ✅
-* `encodeTMCode` / `decodeTMCode` + round-trip — ✅
+and we prove this at every layer.
+
+## What's deferred
+
+The pointwise lookup `(trToList tr)[3 * q.val + symbolIdx ob] = tr q ob`
+(restating the canonical-order property of the transition flattening)
+is stated but not proved here. It is needed for the full injectivity
+of `decodeTMCode (encodeTMCode c) = some c` but not for the
+undecidability proof in `Halt.Undecidable`, which uses `encodeTMCode`
+only as an injection (not requiring a left inverse).
 -/
 
 namespace Halt.Encoding

@@ -10,11 +10,11 @@ public import PCP.Halt
 @[expose] public section
 
 /-!
-# Normalised TM representation (Phase 1 of the universal-TM construction)
+# Normalised TM representation
 
-For Path C of the halting-undecidability proof, we need a *concrete*,
+For the halting-undecidability proof we need a *concrete*,
 *finitely-describable* representation of `SingleTapeTM` so that one TM
-can take another TM's description as input (the universal-TM trick).
+can take another TM's description as input.
 
 cslib's `SingleTapeTM Symbol` is too general: its `State` field can be
 any inhabited `Fintype`, not necessarily `Fin n`. We can't serialise an
@@ -27,17 +27,9 @@ This file fixes the canonical choice:
 * **States**: `Fin (numStates + 1)` (i.e., `{0, …, numStates}`).
 
 `TMCode` is the finitely-describable record of a TM in this normalised
-form. `tmCodeToTM` interprets it as a cslib `SingleTapeTM Bool`. We
-prove a couple of `simp` lemmas connecting the two.
-
-## Status
-
-* `TMCode` ✅
-* `tmCodeToTM` ✅
-* Simulation correctness lemmas ✅
-
-Next phases: `Halt.TMCodeEncoding` (Gödel numbering as `List Bool`) and
-`Halt.UniversalTM.*` (the universal TM itself). See `Halt/ROADMAP.md`.
+form. `TMCode.toTM` interprets it as a cslib `SingleTapeTM Bool`.
+`Halt.codeOf` (in `Halt.CodeOf`) gives the converse — every concrete
+`SingleTapeTM Bool` is, up to state renaming, a `TMCode`.
 -/
 
 namespace Halt

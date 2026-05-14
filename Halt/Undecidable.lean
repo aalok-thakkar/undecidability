@@ -10,29 +10,44 @@ public import Halt.CodeOf
 @[expose] public section
 
 /-!
-# The Halting Problem is undecidable for `SingleTapeTM Bool` (Phase 4)
+# The Halting Problem is undecidable for `SingleTapeTM Bool`
 
 We prove that the **self-halt** decision problem
 
   `K := { c : TMCode | c.toTM halts on encodeTMCode c }`
 
 cannot be decided by any `SingleTapeTM Bool`. The argument is the
-classical diagonal:
+classical diagonal.
 
-* Assume `D : SingleTapeTM Bool` is a strict K-decider — on input
-  `encodeTMCode c`, `D` outputs `[true]` if `c.toTM` halts on
-  `encodeTMCode c`, and `[false]` otherwise.
-* Build the *diagonal* TM `diagTM D` directly (without `compComputer`):
-  it runs `D` until `D` would halt; then it inspects the head symbol
-  of `D`'s output tape. If the head is `true`, it loops forever; if
-  the head is `false` (or blank), it halts.
+## Construction
+
+* Assume `D : SingleTapeTM Bool` is a strict K-decider (`IsSelfHaltDecider`,
+  see `Halt.Basic`) — on input `encodeTMCode c`, `D` outputs `[true]`
+  if `c.toTM` halts on `encodeTMCode c`, and `[false]` otherwise.
+* Build the *diagonal* TM `diagTM D` directly (state space
+  `D.State ⊕ DiagPost`, with `DiagPost = {reading, loop}`): it
+  simulates `D` until `D` would halt; then it inspects the head symbol
+  of `D`'s output tape. If the head is `true`, `diagTM` enters an
+  infinite `loop` state; if the head is `false` (or blank), it halts.
 * Let `c_diag := codeOf (diagTM D)`. By `IsSelfHaltDecider` and
-  `halts_codeOf_iff`, `D` outputs `[true]` iff `c_diag.toTM` halts iff
-  `diagTM` halts iff `D` outputs `[false]`. Contradiction by output
-  determinism.
+  `Halt.CodeOf.halts_codeOf_iff`, `D` outputs `[true]` iff `c_diag.toTM`
+  halts iff `diagTM D` halts iff `D` outputs `[false]`. Contradiction.
+
+## Technical core
+
+The forward direction (`Outputs D w [true] → ¬ Halts (diagTM D) w`)
+uses *deterministic confluence* on `ReflTransGen`: a `D`-lifted trace
+ending in `loop` and the assumed halt trace must agree by determinism,
+but `loop` is closed under stepping, so no halt is reachable.
+
+The backward direction (`Outputs D w [false] → Halts (diagTM D) w`) is
+direct: lift `D`'s trace to `diagTM`, take one more step from `reading`
+with head `some false` to reach the halt configuration.
 
 The inlined `diagTM` avoids `compComputer`'s nested match reductions
-and keeps the per-step reasoning straightforward.
+and keeps the per-step reasoning straightforward. The trade-off is
+~370 LoC for `Halt.Undecidable` itself (versus an estimated
+2000–4000 LoC for a textbook universal-TM construction).
 -/
 
 namespace Halt
@@ -274,20 +289,13 @@ private lemma diagTM_loops_of_outputs_true
       simp at h_eq
     · simp [SingleTapeTM.TransitionRelation, SingleTapeTM.step] at h_step'
 
-/-! ## `IsSelfHaltDecider` and the main theorem -/
+/-! ## The main theorem
 
-/-- **`IsSelfHaltDecider D`**: `D : SingleTapeTM Bool` decides the
-self-halt problem `K = { c | c.toTM halts on encodeTMCode c }` via
-its output tape. -/
-def IsSelfHaltDecider (D : SingleTapeTM Bool) : Prop :=
-  ∀ (c : Halt.TMCode),
-    (Halts c.toTM (Halt.Encoding.encodeTMCode c) →
-      SingleTapeTM.Outputs D (Halt.Encoding.encodeTMCode c) [true]) ∧
-    (¬ Halts c.toTM (Halt.Encoding.encodeTMCode c) →
-      SingleTapeTM.Outputs D (Halt.Encoding.encodeTMCode c) [false])
+The predicate `IsSelfHaltDecider` lives in `Halt.Basic`; here we use
+it as a hypothesis and derive a contradiction. -/
 
 /-- **The Halting Problem is undecidable**: no `SingleTapeTM Bool` can
-decide the self-halt problem. -/
+decide the self-halt problem `K`. -/
 theorem halt_undecidable :
     ¬ ∃ D : SingleTapeTM Bool, IsSelfHaltDecider D := by
   rintro ⟨D, h_dec⟩
