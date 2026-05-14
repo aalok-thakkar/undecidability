@@ -12,6 +12,7 @@ public import Halt.TMCode
 public import Halt.Encoding
 public import Halt.Pair
 public import Halt.Helpers
+public import Halt.CodeOf
 
 @[expose] public section
 
@@ -35,6 +36,9 @@ This module re-exports the public Halt-undecidability API:
 * `Halt.Pair`      — pair encoding (Phase 3a): length-prefixed
   serialisation of `(c, w)` as a single `List Bool`.
 * `Halt.Helpers`   — concrete helper TMs for the diagonal: `invertTM`
-  (loops on `[true]`, halts on `[false]`) and (TODO) `dupTM` (copies
-  its input). Phases 3c–3d.
+  (loops on `[true]`, halts on `[false]`). Phases 3c–3d.
+* `Halt.CodeOf`    — generic state-renaming `SingleTapeTM Bool → TMCode`
+  with the bisimulation theorem
+  `halts_codeOf_iff : Halts (codeOf tm).toTM w ↔ PCP.Halts tm w`.
+  Phase 3e.
 -/
