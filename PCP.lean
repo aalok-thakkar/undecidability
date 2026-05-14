@@ -11,6 +11,7 @@ public import PCP.MPCP
 public import PCP.Reduction
 public import PCP.Lu
 public import PCP.Reductions.LuToMPCP
+public import PCP.Reductions.LuToPCP
 
 @[expose] public section
 
@@ -26,4 +27,7 @@ This module re-exports the public PCP API:
   `Turing.SingleTapeTM` from cslib).
 * `PCP.Reductions.LuToMPCP` — infrastructure for the `Lu ≤_m MPCP`
   reduction (alphabet, configuration encoding).
+* `PCP.Reductions.LuToPCP` — `halts_iff_pcp`, the composition of
+  `Lu ≤_m MPCP` and `MPCP ≤_m PCP` into a direct `Halts ↔ HasSolution`
+  equivalence.
 -/

@@ -39,6 +39,8 @@ PCP/
                                 `Turing.SingleTapeTM`.
   Reductions/
     LuToMPCP.lean            -- Lu ≤_m MPCP construction and proofs.
+    LuToPCP.lean             -- `halts_iff_pcp`: composition of
+                                Lu ≤_m MPCP with MPCP ≤_m PCP.
 PCP.lean                     -- Library root.
 Main.lean                    -- Executable entry point.
 ROADMAP.md                   -- Detailed proof plan and next steps.
@@ -53,9 +55,11 @@ ROADMAP.md                   -- Detailed proof plan and next steps.
 | `Halts` predicate for `SingleTapeTM`                       | ✅ complete           |
 | `Lu ≤_m MPCP`: tile set + HUM refactor (`NoLeftBoundary`)  | ✅ complete           |
 | `Lu ≤_m MPCP`: forward direction (`Halts → MHasSolution`)  | ✅ complete           |
-| `Lu ≤_m MPCP`: backward direction (strong-A form)          | ✅ complete           |
-| `lu_le_mpcp` (strong-A `Iff`)                              | ✅ complete           |
-| `Halts ↔ MHasSolution` (canonical `Iff` with start tile)   | ✅ complete           |
+| `Lu ≤_m MPCP`: backward direction (`MHasSolution → Halts`) | ✅ complete           |
+| Canonical `lu_le_mpcp` (`Halts ↔ MHasSolution`)            | ✅ complete           |
+| `halts_iff_pcp` (composition `Halts ↔ HasSolution …`)      | ✅ complete           |
+| Halting-problem undecidability                             | 🚧 not in repo or cslib |
+| HUM normalisation (lifting `NoBlankWrites`/`NoLeftBoundary`)| 🚧 not yet            |
 
 ## What is proved
 
