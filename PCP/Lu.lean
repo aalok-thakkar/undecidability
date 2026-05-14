@@ -24,9 +24,9 @@ reduction in `PCP.Reductions.LuToMPCP`.
 ## Note on undecidability
 
 The undecidability of `Halts` is the classical *Halting Problem*. It is
-**not** proved in this file (and as of this writing is not present in
-cslib either). The reductions `Lu ≤_m MPCP ≤_m PCP` developed in this
-repository stand on their own — they show
+**not** proved in this file, and is not present in cslib for
+`Turing.SingleTapeTM`. The reductions `Lu ≤_m MPCP ≤_m PCP` developed in
+this repository stand on their own — they show
 
   `Halts tm w ↔ HasSolution (mpcpToPcp (startTile tm w) (luTiles tm))`
 
@@ -34,6 +34,12 @@ repository stand on their own — they show
 Closing this into a proof that PCP is undecidable additionally requires
 (a) a proof that `Halts` is undecidable and (b) HUM normalisation to
 lift the side conditions. Both are out of scope for this repo.
+
+Mathlib does prove the Halting Problem
+(`Mathlib.Computability.Halting.halting_problem`) but for
+`Nat.Partrec.Code` (partial recursive function codes), not for cslib's
+`SingleTapeTM`. Transporting it across requires a simulation bridge,
+which is also out of scope here.
 -/
 
 namespace PCP

@@ -19,11 +19,15 @@ Hopcroft–Ullman–Motwani side conditions `NoBlankWrites` and
 ## What this repository does *not* prove
 
 To conclude "PCP is undecidable" from `halts_iff_pcp`, two more pieces
-are required, **neither of which is in this repository or in cslib**:
+are required, neither of which is in this repository:
 
-1. A proof that `Halts` itself is undecidable (the classical
-   Halting Problem). This is a substantial development in its own right
-   (universal TM + diagonalisation), and we leave it as future work.
+1. A proof that `Halts` for cslib's `Turing.SingleTapeTM` is undecidable.
+   Mathlib *does* prove the Halting Problem
+   ([`Mathlib.Computability.Halting.halting_problem`](https://leanprover-community.github.io/mathlib4_docs/Mathlib/Computability/Halting.html)),
+   but for `Nat.Partrec.Code` (partial recursive function codes) rather
+   than `Turing.SingleTapeTM`. Bridging the two — showing that cslib's
+   `SingleTapeTM` can simulate `Nat.Partrec.Code` (or vice versa) — is a
+   substantial development of its own and is left for future work.
 2. **HUM normalisation** — a construction lifting the side conditions
    `NoBlankWrites` and `NoLeftBoundary` to an arbitrary TM (the standard
    sentinel-shift construction).
@@ -79,7 +83,7 @@ ROADMAP.md                   -- Detailed proof plan and external deps.
 | `Lu ≤_m MPCP`: backward direction (`MHasSolution → Halts`) | ✅ complete           |
 | Canonical `lu_le_mpcp` (`Halts ↔ MHasSolution`)            | ✅ complete           |
 | `halts_iff_pcp` (composition `Halts ↔ HasSolution …`)      | ✅ complete           |
-| Halting-problem undecidability                             | 🚧 not in repo or cslib |
+| Halting-problem undecidability for `SingleTapeTM`          | 🚧 Mathlib proves it for `Nat.Partrec.Code`; bridge to cslib's `SingleTapeTM` is future work |
 | HUM normalisation (lifting `NoBlankWrites`/`NoLeftBoundary`)| 🚧 future work        |
 
 ## What is proved
@@ -180,10 +184,16 @@ solvability of the explicit, computably constructed instance
 The reduction chain is closed; what remains for a complete PCP-undecidability
 proof in Lean 4 is external to this repository:
 
-1. **Halting-problem undecidability.** A theorem of the form
-   `¬ ∃ decide, ∀ tm w, decide ⟨tm, w⟩ = true ↔ Halts tm w`.
-   Neither this repository nor cslib provides it. A first-principles
-   diagonalisation proof would be a substantial development on its own.
+1. **Halting-problem undecidability for `SingleTapeTM`.** Mathlib already
+   proves the Halting Problem for partial recursive function codes
+   ([`Mathlib.Computability.Halting.halting_problem`](https://leanprover-community.github.io/mathlib4_docs/Mathlib/Computability/Halting.html):
+   `¬ ComputablePred fun c => (eval c n).Dom`).
+   What's needed to apply this here is a bridge between cslib's
+   `Turing.SingleTapeTM` and `Nat.Partrec.Code` — i.e., a proof that
+   `SingleTapeTM` can simulate every partial recursive function (or vice
+   versa). Mathlib's `Computability.TMToPartrec` provides such a bridge
+   for *its own* TM model; an analogous bridge for cslib's `SingleTapeTM`
+   would close the gap.
 
 2. **HUM normalisation.** A construction
    `tm ↦ (tm', w')` producing an equivalent machine satisfying both
@@ -192,3 +202,18 @@ proof in Lean 4 is external to this repository:
    future `PCP.Normalize` module.
 
 See `ROADMAP.md` for further details.
+
+## CFG-intersection-emptiness reduction
+
+A companion library [`CFG/`](CFG/) contains the standard Hopcroft–Ullman
+reduction
+
+```lean
+theorem hasSolution_iff_intersectionNonempty (P : Stack α) :
+    HasSolution P ↔ ∃ w, w ∈ (topCFG P).language ∧ w ∈ (botCFG P).language
+```
+
+connecting PCP to *CFG-intersection-emptiness* — given two context-free
+grammars `G₁` and `G₂`, is `L(G₁) ∩ L(G₂) = ∅`? With this reduction, if
+PCP is undecidable then CFG-intersection-emptiness is too. The library
+uses Mathlib's `ContextFreeGrammar` (cslib has no CFG framework).

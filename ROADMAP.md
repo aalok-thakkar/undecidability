@@ -159,9 +159,9 @@ The transitive composition of `lu_le_mpcp` with `mpcp_iff_pcp`.
 ## 🚧 External dependencies (out of scope for this repo)
 
 To conclude "PCP is undecidable" from `halts_iff_pcp`, two more pieces
-are required. Neither is in this repo and neither is currently in cslib.
+are required. Neither is in this repo nor in cslib.
 
-### 1. Halting-problem undecidability
+### 1. Halting-problem undecidability for `Turing.SingleTapeTM`
 
 A theorem of the form
 
@@ -170,10 +170,34 @@ A theorem of the form
     ∀ x, decide x = true ↔ Halts x.1 x.2
 ```
 
-A search of cslib (`Cslib.Computability.Machines.SingleTapeTuring` and
-neighbours) finds no such result. A first-principles proof (Cantor /
-diagonalisation against a universal TM) is a substantial development on
-its own; we leave it as future work.
+**Mathlib has a halting-problem undecidability proof, but for a
+different model.** Specifically,
+[`Mathlib.Computability.Halting.halting_problem`](https://leanprover-community.github.io/mathlib4_docs/Mathlib/Computability/Halting.html)
+proves
+
+```lean
+theorem halting_problem (n) : ¬ComputablePred fun c => (eval c n).Dom
+```
+
+where `c : Nat.Partrec.Code` and `eval c n : Part ℕ`. This is the
+Halting Problem for **partial recursive function codes**, not for cslib's
+`Turing.SingleTapeTM`.
+
+Bridging the two would require either:
+- showing `Turing.SingleTapeTM` can simulate every `Nat.Partrec.Code`
+  (then transport Mathlib's `halting_problem` via the simulation), or
+- showing the reverse: `Nat.Partrec.Code` can simulate every
+  `Turing.SingleTapeTM` (so cslib's `Halts` reduces to Mathlib's
+  halting predicate).
+
+Mathlib's `Computability.TMToPartrec` provides such a bridge for
+*Mathlib's own* TM model (`Turing.PartrecToTM2`), not for cslib's
+`SingleTapeTM`. Building the analogous bridge for cslib's model is a
+substantial development of its own; we leave it as future work.
+
+A first-principles proof (Cantor / diagonalisation against a universal
+cslib `SingleTapeTM`) is an alternative — comparable in size to
+Mathlib's existing proof for `Nat.Partrec.Code`.
 
 ### 2. HUM normalisation
 
