@@ -4428,4 +4428,283 @@ theorem halts_iff_mhasSolution_forward (tm : SingleTapeTM Symbol)
     Halts tm w → MHasSolution (startTile tm w) (luTiles tm) :=
   halts_implies_mhasSolution tm h_nbw w h_nlb
 
+/-! ## Step 6 (canonical): `backward_aux_weak` — strong induction with
+chain-tracked queue
+
+Generalises `backward_aux` to admit `A` drawn from
+`startTile :: luTiles tm`. The matching invariant carries a `queue` of
+cfgs whose encodings appear in `tau1 A` (concatenated via
+`queueEncoding`). The `chains` parameter associates each cfg in the
+queue with a reachability proof from `initCfg`. At each iteration we
+pop the head `cfg`, peel its step block via the appropriate
+extras-aware step lemma, and push the new cfg(s) onto the tail of the
+queue — one (`stepResult`) for `sepTile`, two (`stepResult` + `initCfg`)
+for `startTile`. When the popped cfg's state is `none`, the
+accompanying chain is the halt witness for `initCfg →* halted`. -/
+
+private lemma backward_aux_weak (tm : SingleTapeTM Symbol)
+    (h_nbw : NoBlankWrites tm) (w_in : List Symbol)
+    (h_nlb : NoLeftBoundary tm w_in) :
+    ∀ (n : ℕ) (A : Stack (Alpha tm.State Symbol))
+       (queue : List tm.Cfg)
+       (chains : ∀ c ∈ queue, Relation.ReflTransGen tm.TransitionRelation
+          (SingleTapeTM.initCfg tm w_in) c),
+      A.length ≤ n →
+      queue ≠ [] →
+      (∀ s ∈ A, s ∈ startTile tm w_in :: luTiles tm) →
+      tau1 A = queueEncoding tm queue ++ tau2 A →
+      ∃ tape : BiTape Symbol,
+        Relation.ReflTransGen tm.TransitionRelation
+          (SingleTapeTM.initCfg tm w_in) ⟨none, tape⟩ := by
+  intro n
+  induction n with
+  | zero =>
+    intro A queue _chains hLen hQ_ne _ hMatch
+    exfalso
+    have hA_nil : A = [] := by
+      cases A with | nil => rfl | cons _ _ => simp at hLen
+    subst hA_nil
+    simp only [tau1_nil, tau2_nil, List.append_nil] at hMatch
+    cases queue with
+    | nil => exact hQ_ne rfl
+    | cons head rest =>
+      simp [queueEncoding] at hMatch
+  | succ n ih =>
+    intro A queue chains hLen hQ_ne h_mem hMatch
+    cases queue with
+    | nil => exact (hQ_ne rfl).elim
+    | cons cfg rest_cfgs =>
+      have hMatch' : tau1 A = encodeCfg tm cfg ++ [#] ++
+                       queueEncoding tm rest_cfgs ++ tau2 A := by
+        rw [hMatch, queueEncoding_cons, List.append_assoc]
+      have chain_cfg : Relation.ReflTransGen tm.TransitionRelation
+          (SingleTapeTM.initCfg tm w_in) cfg :=
+        chains cfg (List.mem_cons_self ..)
+      have rest_chains :
+          ∀ c ∈ rest_cfgs,
+            Relation.ReflTransGen tm.TransitionRelation
+              (SingleTapeTM.initCfg tm w_in) c :=
+        fun c hc => chains c (List.mem_cons_of_mem cfg hc)
+      cases hcfg : cfg with
+      | mk state tape =>
+        cases state with
+        | none =>
+          refine ⟨tape, ?_⟩
+          rw [← hcfg]; exact chain_cfg
+        | some q =>
+          rcases h_tr : tm.tr q tape.head with ⟨⟨w', mov⟩, qNew⟩
+          have h_w_ne : w' ≠ none := by
+            have := h_nbw q tape.head; rw [h_tr] at this; exact this
+          have hMatch'' : tau1 A = encodeRunningCfg tm q tape ++ [#] ++
+                            queueEncoding tm rest_cfgs ++ tau2 A := by
+            rw [hcfg] at hMatch'; exact hMatch'
+          have h_step_cfg : tm.step cfg = some (stepResult tm q tape) := by
+            rw [hcfg]; exact tm_step_running tm q tape
+          have new_chain_step : Relation.ReflTransGen tm.TransitionRelation
+              (SingleTapeTM.initCfg tm w_in) (stepResult tm q tape) :=
+            chain_cfg.tail h_step_cfg
+          -- Build the IH-application helper: given the disjunction's
+          -- chosen branch (new queue value + matching), recurse.
+          -- Common logic for all non-halt-now cases.
+          cases mov with
+          | none =>
+            -- No-move case.
+            obtain ⟨A', hLen', hMem', hTau1Disj⟩ :=
+              starts_with_stepTilesNoMove_weak_ext tm w_in q tape qNew w' h_tr
+                rest_cfgs A h_mem hMatch''
+            have hA'_len : A'.length ≤ n := by omega
+            have h_stepRes : stepResult tm q tape = ⟨qNew, tape.write w'⟩ := by
+              simp [stepResult, h_tr, BiTape.optionMove]
+            have new_chain' : Relation.ReflTransGen tm.TransitionRelation
+                (SingleTapeTM.initCfg tm w_in) ⟨qNew, tape.write w'⟩ := by
+              rw [← h_stepRes]; exact new_chain_step
+            rcases hTau1Disj with hSep | hStart
+            · refine ih A' (rest_cfgs ++ [⟨qNew, tape.write w'⟩]) ?_ hA'_len
+                ?_ hMem' hSep
+              · intro c hc
+                rcases List.mem_append.mp hc with hr | hr
+                · exact rest_chains c hr
+                · rw [List.mem_singleton] at hr; subst hr; exact new_chain'
+              · intro h_empty
+                have := congrArg List.length h_empty
+                simp [List.length_append] at this
+            · refine ih A' (rest_cfgs ++ [⟨qNew, tape.write w'⟩,
+                SingleTapeTM.initCfg tm w_in]) ?_ hA'_len ?_ hMem' hStart
+              · intro c hc
+                rcases List.mem_append.mp hc with hr | hr
+                · exact rest_chains c hr
+                · rcases List.mem_cons.mp hr with rfl | hr2
+                  · exact new_chain'
+                  · rw [List.mem_singleton] at hr2; subst hr2
+                    exact Relation.ReflTransGen.refl
+              · intro h_empty
+                have := congrArg List.length h_empty
+                simp [List.length_append] at this
+          | some dir =>
+            cases dir with
+            | right =>
+              cases h_right : tape.right.toList with
+              | nil =>
+                cases qNew with
+                | none =>
+                  -- Right-boundary halt-now: single TM step reaches halted cfg.
+                  refine ⟨(tape.write w').move_right, ?_⟩
+                  refine chain_cfg.tail ?_
+                  show tm.step cfg = some _
+                  rw [hcfg, tm_step_running]
+                  congr 1
+                  simp [stepResult, h_tr, BiTape.optionMove, BiTape.move]
+                | some qNew_q =>
+                  obtain ⟨A', hLen', hMem', hTau1⟩ :=
+                    starts_with_stepTilesRightBoundary_weak_ext tm w_in q tape
+                      qNew_q w' h_tr h_right (Or.inl h_w_ne) rest_cfgs A h_mem hMatch''
+                  have hA'_len : A'.length ≤ n := by omega
+                  have h_stepRes :
+                      stepResult tm q tape =
+                        ⟨some qNew_q, (tape.write w').move_right⟩ := by
+                    simp [stepResult, h_tr, BiTape.optionMove, BiTape.move]
+                  have new_chain' : Relation.ReflTransGen tm.TransitionRelation
+                      (SingleTapeTM.initCfg tm w_in)
+                      ⟨some qNew_q, (tape.write w').move_right⟩ := by
+                    rw [← h_stepRes]; exact new_chain_step
+                  refine ih A' (rest_cfgs ++ [⟨some qNew_q,
+                    (tape.write w').move_right⟩]) ?_ hA'_len ?_ hMem' hTau1
+                  · intro c hc
+                    rcases List.mem_append.mp hc with hr | hr
+                    · exact rest_chains c hr
+                    · rw [List.mem_singleton] at hr; subst hr; exact new_chain'
+                  · intro h_empty
+                    have := congrArg List.length h_empty
+                    simp [List.length_append] at this
+              | cons _ _ =>
+                have h_right_ne : tape.right.toList ≠ [] := by
+                  rw [h_right]; exact List.cons_ne_nil _ _
+                obtain ⟨A', hLen', hMem', hTau1Disj⟩ :=
+                  starts_with_stepTilesRightInterior_weak_ext tm w_in q tape
+                    qNew w' h_tr h_right_ne (Or.inl h_w_ne) rest_cfgs A h_mem hMatch''
+                have hA'_len : A'.length ≤ n := by omega
+                have h_stepRes :
+                    stepResult tm q tape = ⟨qNew, (tape.write w').move_right⟩ := by
+                  simp [stepResult, h_tr, BiTape.optionMove, BiTape.move]
+                have new_chain' : Relation.ReflTransGen tm.TransitionRelation
+                    (SingleTapeTM.initCfg tm w_in)
+                    ⟨qNew, (tape.write w').move_right⟩ := by
+                  rw [← h_stepRes]; exact new_chain_step
+                rcases hTau1Disj with hSep | hStart
+                · refine ih A' (rest_cfgs ++ [⟨qNew, (tape.write w').move_right⟩])
+                    ?_ hA'_len ?_ hMem' hSep
+                  · intro c hc
+                    rcases List.mem_append.mp hc with hr | hr
+                    · exact rest_chains c hr
+                    · rw [List.mem_singleton] at hr; subst hr; exact new_chain'
+                  · intro h_empty
+                    have := congrArg List.length h_empty
+                    simp [List.length_append] at this
+                · refine ih A' (rest_cfgs ++ [⟨qNew, (tape.write w').move_right⟩,
+                    SingleTapeTM.initCfg tm w_in]) ?_ hA'_len ?_ hMem' hStart
+                  · intro c hc
+                    rcases List.mem_append.mp hc with hr | hr
+                    · exact rest_chains c hr
+                    · rcases List.mem_cons.mp hr with rfl | hr2
+                      · exact new_chain'
+                      · rw [List.mem_singleton] at hr2; subst hr2
+                        exact Relation.ReflTransGen.refl
+                  · intro h_empty
+                    have := congrArg List.length h_empty
+                    simp [List.length_append] at this
+            | left =>
+              cases h_left : tape.left.toList with
+              | nil =>
+                exfalso
+                have h_no_lb := h_nlb cfg chain_cfg q tape hcfg h_left
+                apply h_no_lb
+                rw [h_tr]
+              | cons _ _ =>
+                have h_left_ne : tape.left.toList ≠ [] := by
+                  rw [h_left]; exact List.cons_ne_nil _ _
+                obtain ⟨A', hLen', hMem', hTau1Disj⟩ :=
+                  starts_with_stepTilesLeftInterior_weak_ext tm w_in q tape
+                    qNew w' h_tr h_left_ne (Or.inl h_w_ne) rest_cfgs A h_mem hMatch''
+                have hA'_len : A'.length ≤ n := by omega
+                have h_stepRes :
+                    stepResult tm q tape = ⟨qNew, (tape.write w').move_left⟩ := by
+                  simp [stepResult, h_tr, BiTape.optionMove, BiTape.move]
+                have new_chain' : Relation.ReflTransGen tm.TransitionRelation
+                    (SingleTapeTM.initCfg tm w_in)
+                    ⟨qNew, (tape.write w').move_left⟩ := by
+                  rw [← h_stepRes]; exact new_chain_step
+                rcases hTau1Disj with hSep | hStart
+                · refine ih A' (rest_cfgs ++ [⟨qNew, (tape.write w').move_left⟩])
+                    ?_ hA'_len ?_ hMem' hSep
+                  · intro c hc
+                    rcases List.mem_append.mp hc with hr | hr
+                    · exact rest_chains c hr
+                    · rw [List.mem_singleton] at hr; subst hr; exact new_chain'
+                  · intro h_empty
+                    have := congrArg List.length h_empty
+                    simp [List.length_append] at this
+                · refine ih A' (rest_cfgs ++ [⟨qNew, (tape.write w').move_left⟩,
+                    SingleTapeTM.initCfg tm w_in]) ?_ hA'_len ?_ hMem' hStart
+                  · intro c hc
+                    rcases List.mem_append.mp hc with hr | hr
+                    · exact rest_chains c hr
+                    · rcases List.mem_cons.mp hr with rfl | hr2
+                      · exact new_chain'
+                      · rw [List.mem_singleton] at hr2; subst hr2
+                        exact Relation.ReflTransGen.refl
+                  · intro h_empty
+                    have := congrArg List.length h_empty
+                    simp [List.length_append] at this
+
+/-! ## Step 7 (canonical): `mhasSolution_implies_halts` and the full iff -/
+
+/-- The backward direction of the canonical iff: from an MPCP solution
+for the encoded TM-halting instance, recover `Halts tm w`. Initialises
+`backward_aux_weak`'s queue with `[initCfg]` (chain = `refl`). -/
+theorem mhasSolution_implies_halts (tm : SingleTapeTM Symbol)
+    (h_nbw : NoBlankWrites tm) (w : List Symbol)
+    (h_nlb : NoLeftBoundary tm w)
+    (h : MHasSolution (startTile tm w) (luTiles tm)) :
+    Halts tm w := by
+  obtain ⟨A, h_mem, h_match⟩ := h
+  -- Cancel leading `[#]` from the MHasSolution matching equation.
+  have h_match_cfg :
+      tau1 A = encodeCfg tm (SingleTapeTM.initCfg tm w) ++ [#] ++ tau2 A := by
+    have h_step : # :: tau1 A =
+        # :: (encodeCfg tm (SingleTapeTM.initCfg tm w) ++ [#] ++ tau2 A) := by
+      have h_lhs : (startTile tm w).top ++ tau1 A = # :: tau1 A := by
+        simp [startTile_top]
+      have h_rhs :
+          (startTile tm w).bot ++ tau2 A
+            = # :: (encodeCfg tm (SingleTapeTM.initCfg tm w) ++ [#] ++ tau2 A) := by
+        simp [startTile_bot, List.append_assoc]
+      rw [h_lhs, h_rhs] at h_match
+      exact h_match
+    exact (List.cons.injEq _ _ _ _ |>.mp h_step).2
+  -- Repackage into the `queueEncoding [initCfg]` form.
+  have h_match_queue :
+      tau1 A = queueEncoding tm [SingleTapeTM.initCfg tm w] ++ tau2 A := by
+    rw [h_match_cfg]
+    simp [queueEncoding, List.append_assoc]
+  exact backward_aux_weak tm h_nbw w h_nlb A.length A
+    [SingleTapeTM.initCfg tm w]
+    (fun c hc => by
+      rw [List.mem_singleton] at hc; subst hc
+      exact Relation.ReflTransGen.refl)
+    (le_refl _)
+    (List.cons_ne_nil _ _)
+    h_mem
+    h_match_queue
+
+/-- **Canonical `Lu ≤_m MPCP` iff**. The forward direction is
+`halts_implies_mhasSolution`; the backward direction is the new
+`mhasSolution_implies_halts` (which threads a chain-tracked cfg queue
+through `backward_aux_weak`). -/
+theorem halts_iff_mhasSolution (tm : SingleTapeTM Symbol)
+    (h_nbw : NoBlankWrites tm) (w : List Symbol)
+    (h_nlb : NoLeftBoundary tm w) :
+    Halts tm w ↔ MHasSolution (startTile tm w) (luTiles tm) :=
+  ⟨halts_implies_mhasSolution tm h_nbw w h_nlb,
+   mhasSolution_implies_halts tm h_nbw w h_nlb⟩
+
 end PCP.LuToMPCP
