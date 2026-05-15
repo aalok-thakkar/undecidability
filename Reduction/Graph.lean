@@ -7,6 +7,7 @@ module
 
 public import Lean
 public import Reduction.Basic
+public import Reduction.TMDecidable
 
 public meta section
 
@@ -175,8 +176,64 @@ initialize undecidabilityAnchorAttr : ParametricAttribute Unit ←
   registerParametricAttribute {
     name := `undecidable_anchor
     descr := "Marks a proof of `Undecidable P` as a search anchor for " ++
-             "the DiagonaLean `by reduce` tactic."
+             "the DiagonaLean `by reduce_diag` tactic."
     getParam := fun decl _stx => MetaM.run' (onAnchorAdd decl)
+  }
+
+/-! ## TM-level anchors (`@[tm_undecidable_anchor]`)
+
+Parallel to the classical anchors above, but for `TMUndecidable
+(Problem.predicate P)` proofs. The stored `problem` field is `P`, so
+the existing graph search (which is over `Problem`s) can be reused. -/
+
+/-- The persistent env extension holding TM-level anchors. -/
+initialize tmAnchorExt :
+    SimplePersistentEnvExtension Anchor (List Anchor) ←
+  registerSimplePersistentEnvExtension {
+    addEntryFn := (·.cons)
+    addImportedFn := mkStateFromImportedEntries (·.cons) {}
+  }
+
+/-- Register a new TM-undecidability anchor. -/
+def addTMAnchor (a : Anchor) : CoreM Unit :=
+  modifyEnv fun env => tmAnchorExt.addEntry env a
+
+/-- Get all currently registered TM-undecidability anchors. -/
+def getTMAnchors : CoreM (List Anchor) :=
+  return tmAnchorExt.getState (← getEnv)
+
+/-- Extract `P` from a type of the form
+`∀ ..., TMUndecidable (Problem.predicate P)`. -/
+def extractTMUndecidableProblem (type : Expr) : MetaM (Option Expr) := do
+  forallTelescope type fun args body => do
+    let body := body.consumeMData
+    let (tmName, tmArgs) := body.getAppFnArgs
+    if tmName = ``DiagonaLean.TMUndecidable && tmArgs.size = 1 then
+      let pred := tmArgs[0]!
+      let (predName, predArgs) := pred.getAppFnArgs
+      if predName = ``DiagonaLean.Problem.predicate && predArgs.size = 1 then
+        let problem ← mkLambdaFVars args predArgs[0]!
+        return some problem
+    return none
+
+/-- Process a `@[tm_undecidable_anchor]` declaration. -/
+def onTMAnchorAdd (decl : Name) : MetaM Unit := do
+  let info ← getConstInfo decl
+  match ← extractTMUndecidableProblem info.type with
+  | some problem =>
+    addTMAnchor ⟨problem, decl⟩
+  | none =>
+    throwError "@[tm_undecidable_anchor]: expected declaration of type \
+      `TMUndecidable (Problem.predicate P)` (possibly under binders), \
+      got: {info.type}"
+
+initialize tmUndecidabilityAnchorAttr : ParametricAttribute Unit ←
+  registerParametricAttribute {
+    name := `tm_undecidable_anchor
+    descr := "Marks a proof of `TMUndecidable (Problem.predicate P)` " ++
+             "as a search anchor for `by reduce_diag` on TM-undecidability " ++
+             "goals."
+    getParam := fun decl _stx => MetaM.run' (onTMAnchorAdd decl)
   }
 
 end DiagonaLean.ReductionGraph

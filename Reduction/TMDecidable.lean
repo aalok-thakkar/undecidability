@@ -94,6 +94,21 @@ axiom TMUndecidable.of_TMReduction
     (_h₁ : TMUndecidable pred₁) :
     TMUndecidable pred₂
 
+/-- **Composition of TM-computable functions.** Postulated for the same
+reason as `TMUndecidable.of_TMReduction`: the standard construction
+interleaves two TMs' state spaces, but cslib doesn't expose the
+primitive yet. -/
+axiom TMComputable.comp
+    {f g : List Bool → List Bool}
+    (_h_f : TMComputable f) (_h_g : TMComputable g) :
+    TMComputable (g ∘ f)
+
+/-- **Identity is TM-computable.** A 1-state TM that reads its input
+and immediately halts (without modifying the tape) computes the identity.
+This is implementable in cslib but axiomatised here for uniformity with
+the other TM primitives. -/
+axiom TMComputable.id : TMComputable (fun bits : List Bool => bits)
+
 /-! ## Connection to the framework's classical `Undecidable` -/
 
 /-- TM-decidability implies (classical) `Decidable`-style decidability,

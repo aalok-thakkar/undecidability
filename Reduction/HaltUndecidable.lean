@@ -95,6 +95,12 @@ def EncodedSelfHalt : Problem where
   Input := List Bool
   predicate := selfHaltPred
 
+/-- The TM-level undecidability anchor: `EncodedSelfHalt.predicate` is
+TM-undecidable (immediate from `selfHaltPred_TMUndecidable` since
+`EncodedSelfHalt.predicate` unfolds to `selfHaltPred`). Tagged with
+`@[tm_undecidable_anchor]` so `by reduce_diag` (TM mode) uses it as a
+search anchor. -/
+@[tm_undecidable_anchor]
 theorem EncodedSelfHalt_TMUndecidable :
     TMUndecidable EncodedSelfHalt.predicate :=
   selfHaltPred_TMUndecidable
@@ -112,7 +118,9 @@ namespace DiagonaLean.Reductions
 
 open DiagonaLean DiagonaLean.Problems Halt
 
-/-- `EncodedSelfHalt ≤ₘ EncodedHalt` via input duplication. -/
+/-- `EncodedSelfHalt ≤ₘ EncodedHalt` via input duplication. Tagged
+`@[reduction_graph]` so it participates in `by reduce_diag` searches. -/
+@[reduction_graph]
 def encodedSelfHalt_to_encodedHalt :
     ManyOneReduction EncodedSelfHalt EncodedHalt where
   f := fun bits => Halt.Pair.encodePair bits bits
@@ -129,34 +137,27 @@ def encodedSelfHalt_to_encodedHalt :
 
 end DiagonaLean.Reductions
 
-/-! ## TM-undecidability of `EncodedHalt`
+/-! ## TM-undecidability of `EncodedHalt` (via `by reduce_diag`)
 
 We **postulate** that `encodedSelfHalt_to_encodedHalt.f` is
 TM-computable — its definition is `fun bits => encodePair bits bits`,
 i.e. "compute the length of the input as a unary prefix, then copy the
-input twice", which is a textbook trivial TM construction. Formalising
-the explicit TM in cslib is bookkeeping we defer.
+input twice", a textbook trivial TM construction. The postulate is
+named `<reductionName>_TMComputable` so the tactic discovers it.
 
 With the postulate + the axiomatic transfer in `Reduction.TMDecidable`,
-we get our first downstream `TMUndecidable` theorem.
+the tactic discharges `TMUndecidable EncodedHalt.predicate` by composing
+the anchor + the duplication reduction.
 -/
 
-namespace DiagonaLean
+namespace DiagonaLean.Reductions
 
-open DiagonaLean.Problems DiagonaLean.Reductions
+open DiagonaLean
 
-/-- Postulate: the duplication reduction is TM-computable. -/
+/-- Postulate: the duplication reduction is TM-computable.
+Naming convention `<reductionName>_TMComputable` is required by
+`by reduce_diag` for witness discovery. -/
 axiom encodedSelfHalt_to_encodedHalt_TMComputable :
     TMComputable encodedSelfHalt_to_encodedHalt.f
 
-/-- **TM-undecidability of `EncodedHalt`**: derived from
-`selfHaltPred_TMUndecidable` via the axiomatic transfer at
-`encodedSelfHalt_to_encodedHalt`. -/
-theorem EncodedHalt_TMUndecidable : TMUndecidable EncodedHalt.predicate :=
-  TMUndecidable.of_TMReduction
-    encodedSelfHalt_to_encodedHalt.f
-    encodedSelfHalt_to_encodedHalt_TMComputable
-    encodedSelfHalt_to_encodedHalt.spec
-    selfHaltPred_TMUndecidable
-
-end DiagonaLean
+end DiagonaLean.Reductions

@@ -50,13 +50,15 @@ example : Undecidable MPCP_LB := by reduce_diag
 example : Undecidable EncodedPCP := by reduce_diag
 example : Undecidable EncodedCFGIntersection := by reduce_diag
 
-/-! ## TM-level undecidability (non-vacuous)
+/-! ## TM-level undecidability via `by reduce_diag`
 
-`TMUndecidable selfHaltPred` is derived from `Halt.halt_undecidable`
-(no postulate). `TMUndecidable EncodedHalt.predicate` follows via the
-`encodedSelfHalt_to_encodedHalt` duplication reduction (postulated
-`TMComputable f`). The `TMUndecidable.of_TMReduction` axiom represents
-standard TM composition (~textbook). -/
+`EncodedSelfHalt.predicate` is the registered `@[tm_undecidable_anchor]`
+(via `selfHaltPred_TMUndecidable`, which is derived from
+`Halt.halt_undecidable` without postulates). The tactic searches the
+graph and composes TMComputable witnesses (looked up by naming
+convention `<edgeDeclName>_TMComputable`) to close downstream
+`TMUndecidable _.predicate` goals. -/
 
 example : TMUndecidable selfHaltPred := selfHaltPred_TMUndecidable
-example : TMUndecidable EncodedHalt.predicate := EncodedHalt_TMUndecidable
+example : TMUndecidable EncodedSelfHalt.predicate := by reduce_diag
+example : TMUndecidable EncodedHalt.predicate := by reduce_diag

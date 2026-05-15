@@ -103,18 +103,33 @@ For a genuinely meaningful claim:
 * `Reduction.TMDecidable`     — `TMDecides`, `TMDecidable`,
                                  `TMUndecidable`, `TMComputable` on
                                  `List Bool → Prop`. Transfer theorem
-                                 `TMUndecidable.of_TMReduction` is
+                                 `TMUndecidable.of_TMReduction` and
+                                 composition `TMComputable.comp` are
                                  **axiomatised** (standard TM
-                                 composition, awaiting cslib primitive).
+                                 constructions, awaiting cslib primitives).
 * `Reduction.HaltUndecidable` — bridges `Halt.halt_undecidable` (the
                                  cslib `IsSelfHaltDecider` refutation) to
-                                 `TMUndecidable selfHaltPred`, then via
-                                 the duplication reduction
-                                 `EncodedSelfHalt ≤ₘ EncodedHalt`
-                                 (with postulated `TMComputable f`)
-                                 yields the first downstream
-                                 `TMUndecidable EncodedHalt.predicate`.
+                                 `TMUndecidable selfHaltPred` (no
+                                 postulate). The duplication reduction
+                                 `EncodedSelfHalt ≤ₘ EncodedHalt` is
+                                 registered with `@[reduction_graph]`,
+                                 the anchor with `@[tm_undecidable_anchor]`,
+                                 and a postulated `TMComputable`
+                                 witness named per the convention
+                                 `<reductionName>_TMComputable`.
+
+The `by reduce_diag` tactic dispatches on the goal:
+
+* `Undecidable P` (or `Decidable P → False`) — uses
+  `@[undecidable_anchor]` and composes via `ManyOneReduction.trans` +
+  `Undecidable.of_manyOne`.
+* `TMUndecidable (Problem.predicate P)` — uses
+  `@[tm_undecidable_anchor]`, looks up each edge's
+  `<edgeName>_TMComputable` witness, and composes via
+  `ManyOneReduction.trans` + `TMComputable.comp` +
+  `TMUndecidable.of_TMReduction`.
 
 This makes the framework non-vacuous: a real anchor at the TM level
-plus a (postulated) transfer mechanism.
+plus a (axiomatised) transfer mechanism that the tactic uses
+automatically.
 -/
