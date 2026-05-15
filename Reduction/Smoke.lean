@@ -13,14 +13,16 @@ public import Reduction.Tactic
 public meta section
 
 /-!
-# Smoke test for `by reduce`
+# Smoke test for `by reduce_diag` + TM-undecidability
 
 Postulates an anchor on `EncodedHaltMPCP` (the leaf of the closed
-chain), then asks the tactic to close downstream undecidability goals.
-With the chain
+chain), then asks `by reduce_diag` to close downstream undecidability
+goals via the registered graph. With the chain
 `EncodedHaltMPCP ≤ₘ MPCP_LB ≤ₘ EncodedPCP ≤ₘ EncodedCFGIntersection`
-fully registered, `by reduce` finds and composes the right path for
-each goal.
+fully registered, the tactic finds and composes the right path.
+
+(The tactic is named `reduce_diag` to avoid a name clash with
+Mathlib's `reduce` tactic.)
 -/
 
 open Lean DiagonaLean DiagonaLean.ReductionGraph DiagonaLean.Problems
@@ -41,9 +43,20 @@ def printReductionGraph : CoreM Unit := do
 
 #eval printReductionGraph
 
-/-! ## The `by reduce` tactic in action -/
+/-! ## The `by reduce_diag` tactic in action -/
 
-example : Undecidable EncodedHaltMPCP := by reduce
-example : Undecidable MPCP_LB := by reduce
-example : Undecidable EncodedPCP := by reduce
-example : Undecidable EncodedCFGIntersection := by reduce
+example : Undecidable EncodedHaltMPCP := by reduce_diag
+example : Undecidable MPCP_LB := by reduce_diag
+example : Undecidable EncodedPCP := by reduce_diag
+example : Undecidable EncodedCFGIntersection := by reduce_diag
+
+/-! ## TM-level undecidability (non-vacuous)
+
+`TMUndecidable selfHaltPred` is derived from `Halt.halt_undecidable`
+(no postulate). `TMUndecidable EncodedHalt.predicate` follows via the
+`encodedSelfHalt_to_encodedHalt` duplication reduction (postulated
+`TMComputable f`). The `TMUndecidable.of_TMReduction` axiom represents
+standard TM composition (~textbook). -/
+
+example : TMUndecidable selfHaltPred := selfHaltPred_TMUndecidable
+example : TMUndecidable EncodedHalt.predicate := EncodedHalt_TMUndecidable

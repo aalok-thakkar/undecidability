@@ -13,8 +13,10 @@ public import Reduction.Notation
 public import Reduction.Graph
 public import Reduction.Search
 public import Reduction.Tactic
+public import Reduction.TMDecidable
 public import Reduction.Instances
 public import Reduction.Encoded
+public import Reduction.HaltUndecidable
 public import Reduction.StackMap
 public import Reduction.EncodedPCP
 public import Reduction.EncodedHaltMPCP
@@ -77,16 +79,42 @@ gap to a fully end-to-end undecidability transfer from `HaltTM`.
                                 Component 2.
 * `Reduction.Tactic`         — `composeReductions` (fold a `Path` via
                                 `ManyOneReduction.trans`) and the
-                                `by reduce` tactic that closes
+                                `by reduce_diag` tactic that closes
                                 `Undecidable T` goals end-to-end via
                                 `Undecidable.of_manyOne`. Component 3.
+                                (The tactic is named `reduce_diag` to
+                                avoid a name clash with Mathlib's
+                                `reduce` tactic.)
 
 The full MVP tactic chain is operational: tag reductions with
 `@[reduction_graph]`, an anchor with `@[undecidable_anchor]`, and write
-`example : Undecidable T := by reduce`.
+`example : Undecidable T := by reduce_diag`.
 
 Known limitation: only ground edges are supported by `composeReductions`
 (polymorphic edges throw); the search itself handles polymorphic
 endpoints. Threading metavariables from search through term emission is
 future work.
+
+## TM-level undecidability
+
+The framework's `Undecidable` is classically vacuous (`¬ ∃ Lean-function-decider`).
+For a genuinely meaningful claim:
+
+* `Reduction.TMDecidable`     — `TMDecides`, `TMDecidable`,
+                                 `TMUndecidable`, `TMComputable` on
+                                 `List Bool → Prop`. Transfer theorem
+                                 `TMUndecidable.of_TMReduction` is
+                                 **axiomatised** (standard TM
+                                 composition, awaiting cslib primitive).
+* `Reduction.HaltUndecidable` — bridges `Halt.halt_undecidable` (the
+                                 cslib `IsSelfHaltDecider` refutation) to
+                                 `TMUndecidable selfHaltPred`, then via
+                                 the duplication reduction
+                                 `EncodedSelfHalt ≤ₘ EncodedHalt`
+                                 (with postulated `TMComputable f`)
+                                 yields the first downstream
+                                 `TMUndecidable EncodedHalt.predicate`.
+
+This makes the framework non-vacuous: a real anchor at the TM level
+plus a (postulated) transfer mechanism.
 -/

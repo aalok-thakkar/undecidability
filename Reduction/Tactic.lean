@@ -12,10 +12,15 @@ public import Reduction.Transfer
 public meta section
 
 /-!
-# `by reduce` tactic
+# `by reduce_diag` tactic
 
 Component 3 of the DiagonaLean tactic. Given a goal `⊢ Undecidable T`,
 the tactic:
+
+(The tactic is named `reduce_diag` to avoid a name clash with
+Mathlib's `reduce` tactic, which is a different beast — it reduces an
+expression to whnf rather than searching the reduction graph.)
+
 
 1. Extracts `T` from the goal.
 2. Calls `searchPath T` to find a `Path` anchored at some
@@ -31,7 +36,7 @@ the tactic:
 @[undecidable_anchor]
 axiom my_undecidable : Undecidable SomeProblem
 
-example : Undecidable OtherProblem := by reduce
+example : Undecidable OtherProblem := by reduce_diag
 ```
 
 ## Limitations (MVP)
@@ -73,18 +78,28 @@ def composeReductions (path : Path) : MetaM Expr := do
       acc ← mkAppM ``DiagonaLean.ManyOneReduction.trans #[acc, next]
     return acc
 
-/-- The `by reduce` tactic. Closes a goal of the form
-`Undecidable T` by finding a chain of registered reductions from a
-known-undecidable anchor to `T`. -/
-elab "reduce" : tactic => Tactic.withMainContext do
+/-- Extract a `Problem` argument from a goal of form `Undecidable P` or
+its unfolded form `Decidable P → False`. Returns `none` if neither
+matches. -/
+private def extractGoalProblem (target : Expr) : Option Expr := Id.run do
+  let (name, args) := target.getAppFnArgs
+  if name = ``DiagonaLean.Undecidable && args.size = 1 then
+    return some args[0]!
+  if target.isForall then
+    let dom := target.bindingDomain!
+    let (dName, dArgs) := dom.getAppFnArgs
+    if dName = ``DiagonaLean.Decidable && dArgs.size = 1 then
+      return some dArgs[0]!
+  return none
+
+elab "reduce_diag" : tactic => Tactic.withMainContext do
   let target ← Tactic.getMainTarget
   let target ← instantiateMVars target
-  let (name, args) := target.getAppFnArgs
-  unless name = ``DiagonaLean.Undecidable do
-    throwError "`by reduce`: expected goal of form `Undecidable P`, got: {target}"
-  unless args.size = 1 do
-    throwError "`by reduce`: expected `Undecidable P` (1 argument), got arity {args.size}"
-  let goalProblem := args[0]!
+  let goalProblem ← match extractGoalProblem target with
+    | some p => pure p
+    | none =>
+      throwError "`by reduce`: expected goal of form `Undecidable P` \
+        (or `Decidable P → False`), got: {target}"
   match ← searchPath goalProblem with
   | none =>
     throwError "`by reduce`: no path found from any registered anchor to {goalProblem}"
@@ -92,6 +107,6 @@ elab "reduce" : tactic => Tactic.withMainContext do
     let reduction ← composeReductions path
     let anchorProof ← mkConstWithFreshMVarLevels path.anchor.proofName
     let proof ← mkAppM ``DiagonaLean.Undecidable.of_manyOne #[reduction, anchorProof]
-    Tactic.closeMainGoal `reduce proof
+    Lean.Elab.Tactic.closeMainGoal `reduce_diag proof
 
 end DiagonaLean.ReductionGraph

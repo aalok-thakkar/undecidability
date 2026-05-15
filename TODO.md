@@ -140,17 +140,21 @@ respecting metavariable scope.
 
 ### Component 3: Term emission (~200 LoC) ✅
 
-**Landed** in `Reduction/Tactic.lean`. The `by reduce` tactic
-* extracts `T` from a goal `⊢ Undecidable T`,
+**Landed** in `Reduction/Tactic.lean`. The `by reduce_diag` tactic
+* extracts `T` from a goal `⊢ Undecidable T` (or its unfolded form
+  `Decidable T → False`),
 * runs `searchPath T` to find a `Path`,
 * folds the edges via `mkAppM ``ManyOneReduction.trans` into a single
   reduction term, and
 * applies `Undecidable.of_manyOne` with the anchor's proof.
 
+(Renamed `reduce` → `reduce_diag` to avoid clashing with Mathlib's
+`reduce` tactic, which whnfs the goal expression.)
+
 Smoke test (`Reduction/Smoke.lean`) closes
 `Undecidable EncodedHaltMPCP`, `Undecidable MPCP_LB`,
 `Undecidable EncodedPCP`, `Undecidable EncodedCFGIntersection` end-to-end
-with just `by reduce`, anchored at a postulated
+with just `by reduce_diag`, anchored at a postulated
 `encodedHaltMPCP_undecidable`.
 
 **MVP limitation**: ground edges only — polymorphic edges (e.g.
