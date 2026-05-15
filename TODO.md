@@ -138,7 +138,26 @@ Hard parts: unification across alphabet parameters (`MPCP α` vs
 `MPCP Bool`), avoiding loops, ordering edges to prefer shorter paths,
 respecting metavariable scope.
 
-### Component 3: Term emission (~200 LoC)
+### Component 3: Term emission (~200 LoC) ✅
+
+**Landed** in `Reduction/Tactic.lean`. The `by reduce` tactic
+* extracts `T` from a goal `⊢ Undecidable T`,
+* runs `searchPath T` to find a `Path`,
+* folds the edges via `mkAppM ``ManyOneReduction.trans` into a single
+  reduction term, and
+* applies `Undecidable.of_manyOne` with the anchor's proof.
+
+Smoke test (`Reduction/Smoke.lean`) closes
+`Undecidable EncodedHaltMPCP`, `Undecidable MPCP_LB`,
+`Undecidable EncodedPCP`, `Undecidable EncodedCFGIntersection` end-to-end
+with just `by reduce`, anchored at a postulated
+`encodedHaltMPCP_undecidable`.
+
+**MVP limitation**: ground edges only — polymorphic edges (e.g.
+`mpcpToPcp α`) throw at term-emission time. Threading metavariables
+from search through composition is future work.
+
+Original spec:
 
 Compose the path into `Undecidable.of_manyOne` applications:
 

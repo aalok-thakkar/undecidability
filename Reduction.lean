@@ -12,6 +12,7 @@ public import Reduction.Transfer
 public import Reduction.Notation
 public import Reduction.Graph
 public import Reduction.Search
+public import Reduction.Tactic
 public import Reduction.Instances
 public import Reduction.Encoded
 public import Reduction.StackMap
@@ -74,7 +75,18 @@ gap to a fully end-to-end undecidability transfer from `HaltTM`.
                                 detection and metavariable
                                 instantiation for polymorphic edges.
                                 Component 2.
+* `Reduction.Tactic`         — `composeReductions` (fold a `Path` via
+                                `ManyOneReduction.trans`) and the
+                                `by reduce` tactic that closes
+                                `Undecidable T` goals end-to-end via
+                                `Undecidable.of_manyOne`. Component 3.
 
-Term emission (Component 3) — composing the path into a
-`Undecidable target` proof via `Undecidable.of_manyOne` — is planned next.
+The full MVP tactic chain is operational: tag reductions with
+`@[reduction_graph]`, an anchor with `@[undecidable_anchor]`, and write
+`example : Undecidable T := by reduce`.
+
+Known limitation: only ground edges are supported by `composeReductions`
+(polymorphic edges throw); the search itself handles polymorphic
+endpoints. Threading metavariables from search through term emission is
+future work.
 -/

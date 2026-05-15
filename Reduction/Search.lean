@@ -57,7 +57,7 @@ structure Path where
 `mkLambdaFVars`) to fresh metavariables before unification. For ground
 endpoints this is a no-op; for polymorphic ones it β-reduces by
 introducing metas for each binder. -/
-private def instantiateEndpoint (e : Expr) : MetaM Expr := do
+def instantiateEndpoint (e : Expr) : MetaM Expr := do
   forallTelescopeReducing (← inferType e) fun args _ => do
     if args.isEmpty then
       return e

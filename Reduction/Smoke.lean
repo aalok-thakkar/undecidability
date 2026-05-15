@@ -8,29 +8,26 @@ module
 public import Lean
 public import Reduction
 public import Reduction.Search
+public import Reduction.Tactic
 
 public meta section
 
 /-!
-# Smoke test for the reduction graph + search
+# Smoke test for `by reduce`
 
-`#eval`s the registered graph and runs `searchPath` on each
-`EncodedX` problem. With a sample anchor on `EncodedHalt`, the search
-should find paths to `EncodedHaltMPCP`, `MPCP_LB`, `EncodedPCP`, and
-`EncodedCFGIntersection` once the missing `EncodedHalt ≤ₘ
-EncodedHaltMPCP` edge is wired (it isn't yet — that's the HUM
-normalisation TODO). For now, the path to `EncodedHalt` itself is
-empty (the anchor matches the target directly).
+Postulates an anchor on `EncodedHaltMPCP` (the leaf of the closed
+chain), then asks the tactic to close downstream undecidability goals.
+With the chain
+`EncodedHaltMPCP ≤ₘ MPCP_LB ≤ₘ EncodedPCP ≤ₘ EncodedCFGIntersection`
+fully registered, `by reduce` finds and composes the right path for
+each goal.
 -/
 
 open Lean DiagonaLean DiagonaLean.ReductionGraph DiagonaLean.Problems
 
 /-- Sample anchor: postulate that `EncodedHaltMPCP` is undecidable.
-This sits at the source of the chain
-`EncodedHaltMPCP ≤ₘ MPCP_LB ≤ₘ EncodedPCP ≤ₘ EncodedCFGIntersection`,
-so paths to any later node should resolve. The TM-level proof in
-`Halt.Undecidable` doesn't yet bridge to the framework's `Undecidable`
-notion (see TODO) — this is a postulate purely to exercise the search. -/
+The TM-level proof in `Halt.Undecidable` doesn't yet bridge to the
+framework's `Undecidable` notion (see TODO). -/
 axiom encodedHaltMPCP_undecidable : Undecidable EncodedHaltMPCP
 
 attribute [undecidable_anchor] encodedHaltMPCP_undecidable
@@ -42,21 +39,11 @@ def printReductionGraph : CoreM Unit := do
   for e in edges.reverse do
     IO.println s!"  • {e.declName}"
 
-/-- Run `searchPath` and print the result. -/
-def trySearch (name : String) (target : Expr) : MetaM Unit := do
-  IO.println s!"\nsearchPath for {name}:"
-  match ← searchPath target with
-  | none => IO.println "  (no path)"
-  | some p =>
-    IO.println s!"  anchor: {p.anchor.proofName}"
-    IO.println s!"  {p.edges.length} edge(s)"
-    for e in p.edges do
-      IO.println s!"    via {e.declName}"
-
 #eval printReductionGraph
 
-#eval show MetaM Unit from do
-  trySearch "EncodedHaltMPCP"        (Expr.const ``EncodedHaltMPCP [])
-  trySearch "MPCP_LB"                (Expr.const ``MPCP_LB [])
-  trySearch "EncodedPCP"             (Expr.const ``EncodedPCP [])
-  trySearch "EncodedCFGIntersection" (Expr.const ``EncodedCFGIntersection [])
+/-! ## The `by reduce` tactic in action -/
+
+example : Undecidable EncodedHaltMPCP := by reduce
+example : Undecidable MPCP_LB := by reduce
+example : Undecidable EncodedPCP := by reduce
+example : Undecidable EncodedCFGIntersection := by reduce
