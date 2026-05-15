@@ -5,16 +5,52 @@ landed in the repository. For the project vision see
 [`README.md`](README.md); for the forward-looking work plan see
 [`TODO.md`](TODO.md).
 
-The reductions assembled here form the spine of the eventual
-DiagonaLean reduction graph:
+## The reduction graph
+
+DiagonaLean's reduction graph has **13 registered edges** at this
+point. Visualised as a chain of `List Bool`-input encoded problems
+(the form compatible with `TMComputable`):
 
 ```
-Halt  ≤_m  MPCP  ≤_m  PCP  ≤_m  CFG-Intersection-Nonempty
+selfHaltPred                                                    (List Bool → Prop)
+  ↑ tm-anchor: selfHaltPred_TMUndecidable [REAL theorem from halt_undecidable]
+  │
+CanonicalSelfHalt          ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─→ HaltsOnEverything
+  ↑ tm-anchor                  canonicalSelfHalt_to_                (Rice extender)
+  │ CanonicalSelfHalt_         haltsOnEverything
+  │ TMUndecidable
+  │
+EncodedSelfHalt
+  │ encodedSelfHalt_to_encodedHalt
+  ▼
+EncodedHalt   ←─ ─ ─ ─ ─ ─ ─ HaltTMCode ≡ₘ EncodedHalt
+  │                          (via haltTMCode_to_encodedHalt,
+  │ encodedHalt_to_           encodedHalt_to_haltTMCode)
+  │ encodedHaltMPCP
+  ▼ (HUM-normalising wrapper)
+EncodedHaltMPCP   ←─ ─ ─ ─ ─ MPCP_LB
+  │                          (via encodedHaltMPCP_to_mpcpLB)
+  │ encodedHaltMPCP_to_       
+  │ encodedMPCP_LB           Also: HaltTM ≤ HaltTMCode
+  ▼
+EncodedMPCP_LB             EncodedPCP ←─ ─ ─ mpcpToPcp α
+  │                          ↑
+  │ encodedMPCP_LB_to_       │ encodedPCP_to_
+  │ encodedPCP_LB            │ encodedCFGIntersection
+  ▼                          ▼
+EncodedPCP_LB              EncodedCFGIntersection
+  │
+  │ encodedPCP_LB_to_encodedCFGI_LB
+  ▼
+EncodedCFGI_LB
 ```
 
-plus the stand-alone proof that the halting problem itself is
-undecidable for cslib's `SingleTapeTM Bool`. All edges of this chain
-are closed as iffs.
+The thick chain on the left (`selfHaltPred → … → EncodedCFGI_LB`) is
+the spine through which `by reduce_diag` propagates undecidability.
+The `mpcpToPcp α` polymorphic edge and the non-`List Bool` middle
+nodes (`MPCP_LB`, `EncodedPCP`, `EncodedCFGIntersection`,
+`HaltTMCode`, `HaltTM`) are registered but currently only used by the
+classical `Undecidable` mode of the tactic.
 
 ## Anchor nodes
 
@@ -33,6 +69,24 @@ compositional diagonal: build `diagTM D` by inlining the
 `ReflTransGen` to derive a contradiction. See
 [`Halt/ROADMAP.md`](Halt/ROADMAP.md) for the detailed construction.
 
+### TM-level bridge — [`Reduction/HaltUndecidable.lean`](Reduction/HaltUndecidable.lean)
+
+```lean
+theorem selfHaltPred_TMUndecidable : TMUndecidable selfHaltPred
+```
+
+Lifts `halt_undecidable` to the framework's `TMUndecidable`: any
+total TM-decider for `selfHaltPred` (the `List Bool → Prop` form of
+the self-halt question) would in particular be an `IsSelfHaltDecider`,
+contradicting `halt_undecidable`. Tagged `@[tm_undecidable_anchor]`
+via `EncodedSelfHalt_TMUndecidable`.
+
+A second `@[tm_undecidable_anchor]` at `CanonicalSelfHalt.predicate`
+(`Halt/Rice/Theorem.lean`) supplies the canonical form `Halts c.toTM
+(encodeTMCode c)` needed for the Rice reduction.
+
+## Edges in the graph
+
 ### MPCP ≤_m PCP — [`PCP/Reduction.lean`](PCP/Reduction.lean)
 
 Full `mpcp_iff_pcp` via the Hopcroft–Ullman symbol-padding
@@ -46,29 +100,7 @@ The bulk of the project (~4100 LoC). Both directions of the canonical
 iff `Halts tm w ↔ MHasSolution (startTile tm w) (haltTiles tm)` under
 the HUM side conditions `NoBlankWrites` and `NoLeftBoundary`.
 
-* **Forward**: interleave step-simulation tile groups
-  (`stepTilesNoMove`, `stepTilesRightInterior`, `stepTilesRightBoundary`,
-  `stepTilesLeftInterior`) over the halting trace, closing with
-  `absorbAndFinish`.
-* **Backward (strong-A form)**: `halt_le_mpcp_strong` via strong
-  induction on `A.length`. Per-tile forcing lemmas
-  (`mem_haltTiles_top`, `copy_prefix_forced`, `transition_forced`,
-  `sep_forced`, `no_tile_for_state_sharp`, etc.) identify each tile
-  uniquely from its top character. The halt-now sub-case is handled
-  directly to sidestep the non-unique absorption-phase decomposition.
-* **Backward (canonical form)**: `halt_le_mpcp` extends to
-  `A ⊆ startTile :: haltTiles tm` via `backward_aux_weak` threading a
-  chain-tracked configuration queue.
-
 ### Halt ≤_m PCP — [`PCP/Reductions/HaltToPCP.lean`](PCP/Reductions/HaltToPCP.lean)
-
-```lean
-theorem halts_iff_pcp (tm : SingleTapeTM Symbol) (w : List Symbol)
-    (h_nbw : NoBlankWrites tm) (h_nlb : NoLeftBoundary tm w) :
-    Halts tm w ↔
-    HasSolution (mpcpToPcp (startTile tm w) (haltTiles tm)) :=
-  (halt_le_mpcp tm h_nbw w h_nlb).trans (mpcp_iff_pcp _ _)
-```
 
 Composition of the two iffs.
 
@@ -79,18 +111,56 @@ theorem hasSolution_iff_intersectionNonempty (P : Stack α) :
     HasSolution P ↔ ∃ w, w ∈ (topCFG P).language ∧ w ∈ (botCFG P).language
 ```
 
-For each tile `t ∈ P`, two production rules over alphabet `α ⊕ Tile α`:
+For each tile `t ∈ P`, two production rules over alphabet `α ⊕ Tile α`.
+A derivation traces a tile sequence; the reverse order of markers
+forces both grammars to commit to the same sequence; the `.inl`/`.inr`
+alphabet split lets us recover the PCP witness uniquely.
 
-| Grammar  | Recursive rule                       | Base rule                   |
-|----------|--------------------------------------|-----------------------------|
-| `topCFG` | `S → t.top.inl ++ S ++ [.inr t]`     | `S → t.top.inl ++ [.inr t]` |
-| `botCFG` | `S → t.bot.inl ++ S ++ [.inr t]`     | `S → t.bot.inl ++ [.inr t]` |
+### HUM-normalising wrapper — [`Halt/Normalise.lean`](Halt/Normalise.lean)
 
-A derivation traces a tile sequence `[t₁, …, t_k]` and emits
-`(tau_proj A).map .inl ++ A.reverse.map .inr`. The reverse order of
-markers forces both grammars to commit to the same sequence; the
-`.inl`/`.inr` alphabet split lets us recover the PCP witness uniquely
-via `list_inl_inr_split`.
+Postulated `NormalisingWrapper`: a function `(c, w) ↦ (c', w')`
+together with proofs of `NoBlankWrites c'.toTM`, `NoLeftBoundary
+c'.toTM w'`, and `Halts c.toTM w ↔ Halts c'.toTM w'`. Used in
+[`Reduction/EncodedHaltNormalised.lean`](Reduction/EncodedHaltNormalised.lean)
+to build the real edge `EncodedHalt ≤ₘ EncodedHaltMPCP`. The standard
+construction is a 2-bit alphabet shift with reserved bit-pairs for a
+left-edge marker and a synthetic blank symbol.
+
+### Rice extender — [`Halt/Rice/Extender.lean`](Halt/Rice/Extender.lean)
+
+`riceConstTM c : SingleTapeTM Bool` — the four-phase TM (erase → write
+`encodeTMCode c` → move back → simulate `c.toTM`). The behaviour
+theorem `SemHalt (riceConstTM c) = univ ↔ Halts c.toTM (encodeTMCode c)`
+(and the `= ∅` contrapositive) is postulated in
+[`Halt/Rice/Theorem.lean`](Halt/Rice/Theorem.lean) as
+`semHalt_riceConstTM_dichotomy`. Used in
+`canonicalSelfHalt_to_haltsOnEverything` to close
+`TMUndecidable HaltsOnEverything.predicate`.
+
+### Encoded variants — `Reduction/Encoded*.lean`, `Reduction/StackEncoding.lean`
+
+`List Bool`-input wrappers around every problem in the chain, with
+encoder/decoder infrastructure for `Tile (List Bool)`,
+`Stack (List Bool)`, and `Tile × Stack`. Round-trip lemmas at every
+layer. These provide the stable graph-node identities the tactic
+needs.
+
+## Tactic infrastructure
+
+| Component | File | LoC | Status |
+|---|---|---|---|
+| `@[reduction_graph]` attribute + env extension | `Reduction/Graph.lean` | ~120 | ✅ |
+| Anchor extensions (`@[undecidable_anchor]`, `@[tm_undecidable_anchor]`) | `Reduction/Graph.lean` | included | ✅ |
+| Backward DFS search (with cycle detection, polymorphic instantiation) | `Reduction/Search.lean` | ~110 | ✅ |
+| Term emission (compose path, dispatch on goal form) | `Reduction/Tactic.lean` | ~160 | ✅ |
+
+The `by reduce_diag` tactic dispatches on the goal:
+
+* `Undecidable P` (or its unfold `Decidable P → False`) — composes via
+  `ManyOneReduction.trans` and applies `Undecidable.of_manyOne`.
+* `TMUndecidable (Problem.predicate P)` — composes the
+  `ManyOneReduction` chain *and* the per-edge `<name>_TMComputable`
+  witnesses, then applies the axiomatic `TMUndecidable.of_TMReduction`.
 
 ## Encoding infrastructure
 
@@ -104,47 +174,36 @@ diagonal:
   layer.
 * **`Halt.CodeOf`** — generic state-renaming
   `codeOf : SingleTapeTM Bool → TMCode` with the bisimulation theorem
-  `halts_codeOf_iff : Halts (codeOf tm).toTM w ↔ PCP.Halts tm w`. The
-  bisim goes through an `Equiv` of `Cfg`s plus `step`-commutation,
-  lifted to `ReflTransGen` via `Relation.ReflTransGen.lift`.
+  `halts_codeOf_iff : Halts (codeOf tm).toTM w ↔ PCP.Halts tm w`.
+* **`Halt.Diagonal`** isolates the purely-logical kernel — Cantor's
+  theorem and the abstract self-referential contradiction —
+  independently of any computation model.
+* **`Halt.Pair`** — pair encoding `encodePair u v` for the
+  `(codeBits, input)` form used by `EncodedHalt`.
 
-`Halt.Diagonal` isolates the purely-logical kernel — Cantor's theorem
-and the abstract self-referential contradiction — independently of
-any computation model.
+## Postulates (what still needs to be discharged)
 
-## In progress: Rice's theorem
+DiagonaLean is **complete as a framework**, but several TM-level
+constructions are postulated rather than fully formalised. They fall
+into two categories:
 
-`Halt/Rice/` contains the scaffolding for Rice's theorem.
+**Substantive mathematical content** (each ~1000+ LoC to formalise):
 
-* `Rice.Basic` defines `SemHalt`, `BehaviourEquiv`, `IsSemantic`,
-  `IsPropDecider`, `NonTrivial`, and the semantic-set form
-  (`BehaviourClassProp` + `liftClassProp`).
-* `Rice.TrivialTMs` provides the witnesses `tm_alwaysHalt`
-  (`SemHalt = univ`) and `tm_loop` (`SemHalt = ∅`).
-* `Rice.Extender` defines `riceConstTM : TMCode → SingleTapeTM Bool`,
-  the four-phase TM (erase → write `encodeTMCode c` → move back →
-  simulate `c.toTM`). The construction is complete; the behaviour
-  theorem `SemHalt (riceConstTM c) = univ ↔ Halts c.toTM
-  (encodeTMCode c)` (four-phase bisimulation) is the next chunk.
+* `normalisingWrapper` — the HUM-normalising TM wrapper (2-bit
+  alphabet shift). Standard textbook construction.
+* `semHalt_riceConstTM_dichotomy` — the four-phase Rice extender
+  bisimulation.
 
-See [`Halt/ROADMAP.md`](Halt/ROADMAP.md) for the construction-level
-notes specific to `Halt/`.
+**TM-composition machinery** (would all be discharged by a single
+cslib-level TM-composition primitive):
 
-## What's deferred
-
-Not on the critical path of any current theorem; recorded for
-completeness. The forward-looking plan, including how to lift these
-into the DiagonaLean framework, lives in [`TODO.md`](TODO.md).
-
-* **HUM normalisation** removes the `NoBlankWrites` / `NoLeftBoundary`
-  side conditions from `halts_iff_pcp`.
-* **`HALT_TM` (pair-form)** undecidability via `K ≤_m HALT_TM`.
-* **`decodeTMCode` left-inverse** completion in `Halt.Encoding`
-  (requires the deferred pointwise `trToList` lookup lemma).
-* **Symbol-to-Bool simulation** bridge for general-alphabet
-  undecidability.
+* `TMComputable.comp` — `TMComputable f → TMComputable g →
+  TMComputable (g ∘ f)`.
+* `TMComputable.id` — the identity is TM-computable.
+* `TMUndecidable.of_TMReduction` — transfer theorem for TM-undecidability.
+* Per-edge `<edgeName>_TMComputable` witnesses (6 currently).
 
 ## Build invariant
 
-Every commit MUST keep `lake build` clean with **no `sorry`** and no
+Every commit keeps `lake build` clean with **no `sorry`** and no
 warnings.
