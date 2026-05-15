@@ -27,12 +27,20 @@ Mathlib's `reduce` tactic.)
 
 open Lean DiagonaLean DiagonaLean.ReductionGraph DiagonaLean.Problems
 
-/-- Sample anchor: postulate that `EncodedHaltMPCP` is undecidable.
-The TM-level proof in `Halt.Undecidable` doesn't yet bridge to the
-framework's `Undecidable` notion (see TODO). -/
+/-- Sample anchor (classical): postulate that `EncodedHaltMPCP` is
+undecidable. -/
 axiom encodedHaltMPCP_undecidable : Undecidable EncodedHaltMPCP
 
 attribute [undecidable_anchor] encodedHaltMPCP_undecidable
+
+/-- Sample anchor (TM-level): postulate that `EncodedHaltMPCP.predicate`
+is TM-undecidable. This is exactly the HUM-normalisation gap: a real
+proof would compose `selfHaltPred_TMUndecidable` with the
+TM-normalisation reduction `EncodedHalt → EncodedHaltMPCP`. We
+postulate it so the LB chain to `EncodedCFGI_LB` is reachable. -/
+axiom encodedHaltMPCP_tm_undecidable : TMUndecidable EncodedHaltMPCP.predicate
+
+attribute [tm_undecidable_anchor] encodedHaltMPCP_tm_undecidable
 
 /-- Print all registered edges. -/
 def printReductionGraph : CoreM Unit := do
@@ -57,8 +65,24 @@ example : Undecidable EncodedCFGIntersection := by reduce_diag
 `Halt.halt_undecidable` without postulates). The tactic searches the
 graph and composes TMComputable witnesses (looked up by naming
 convention `<edgeDeclName>_TMComputable`) to close downstream
-`TMUndecidable _.predicate` goals. -/
+`TMUndecidable _.predicate` goals.
+
+The chain runs end-to-end:
+`EncodedSelfHalt → EncodedHalt → EncodedHaltMPCP → EncodedMPCP_LB
+  → EncodedPCP_LB → EncodedCFGI_LB`. Note: the
+`EncodedHalt → EncodedHaltMPCP` edge is **not** in the graph (the HUM
+normalisation gap), so the chain breaks at `EncodedHalt`. -/
 
 example : TMUndecidable selfHaltPred := selfHaltPred_TMUndecidable
 example : TMUndecidable EncodedSelfHalt.predicate := by reduce_diag
 example : TMUndecidable EncodedHalt.predicate := by reduce_diag
+
+/-! ### Downstream LB chain (anchored at the postulated `encodedHaltMPCP_tm_undecidable`)
+
+With `encodedHaltMPCP_tm_undecidable` as the TM anchor, `by reduce_diag`
+walks the chain to `EncodedCFGI_LB.predicate`. -/
+
+example : TMUndecidable EncodedHaltMPCP.predicate := by reduce_diag
+example : TMUndecidable EncodedMPCP_LB.predicate := by reduce_diag
+example : TMUndecidable EncodedPCP_LB.predicate := by reduce_diag
+example : TMUndecidable EncodedCFGI_LB.predicate := by reduce_diag
