@@ -12,7 +12,9 @@ public import Reduction.Transfer
 public import Reduction.Notation
 public import Reduction.Instances
 public import Reduction.Encoded
+public import Reduction.StackMap
 public import Reduction.EncodedPCP
+public import Reduction.EncodedHaltMPCP
 public import Reduction.EncodedCFG
 
 @[expose] public section
@@ -37,5 +39,25 @@ TM-level refinement (`TMComputableReduction`) is on the TODO; see
 
 For instances wrapping the existing reductions (`mpcp_iff_pcp`,
 `halt_le_mpcp`, `halts_iff_pcp`, `hasSolution_iff_intersectionNonempty`,
-`halts_codeOf_iff`), see `Reduction.Instances` (forthcoming).
+`halts_codeOf_iff`), see `Reduction.Instances`.
+
+## Encoded graph (`List Bool`-input variants)
+
+To give the reduction graph stable `Type`-level node identities, the
+`Reduction.Encoded*` modules wrap problems at fixed alphabets:
+
+* `Reduction.Encoded`        — `EncodedHalt` (`HaltTMCode ≡ₘ EncodedHalt`).
+* `Reduction.StackMap`       — generic per-symbol injection lifting.
+* `Reduction.EncodedPCP`     — `MPCP_LB`, `EncodedPCP`, and the
+                                `mpcpLB_to_encodedPCP` edge via `flattenExt`.
+* `Reduction.EncodedHaltMPCP` — `EncodedHaltMPCP` and the
+                                `encodedHaltMPCP_to_mpcpLB` edge via `encodeAlpha`.
+* `Reduction.EncodedCFG`     — `EncodedCFGIntersection` and the
+                                `encodedPCP_to_encodedCFGIntersection` edge.
+
+The chain
+`EncodedHaltMPCP ≤ₘ MPCP_LB ≤ₘ EncodedPCP ≤ₘ EncodedCFGIntersection`
+runs end-to-end. The missing edge `EncodedHalt ≤ₘ EncodedHaltMPCP`
+(TM normalisation to `NoBlankWrites ∧ NoLeftBoundary`) is the remaining
+gap to a fully end-to-end undecidability transfer from `HaltTM`.
 -/
