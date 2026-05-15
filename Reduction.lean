@@ -11,6 +11,7 @@ public import Reduction.Composition
 public import Reduction.Transfer
 public import Reduction.Notation
 public import Reduction.Instances
+public import Reduction.Encoded
 
 @[expose] public section
 

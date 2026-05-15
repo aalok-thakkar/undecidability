@@ -50,6 +50,145 @@ or (b) finish Rice's theorem (independent of the framework gap).
 
 ---
 
+## The tactic — architecture
+
+The headline `by reduce` tactic that traverses the registered
+reduction graph is the most distinctive deliverable of DiagonaLean.
+It splits into three components, in dependency order. The first two
+are plumbing; the third is where the proof-search magic happens.
+
+### Component 1: `@[reduction_graph]` attribute (~100 LoC)
+
+The reduction graph is an `Environment` extension that maps
+`Problem`-term keys to outgoing edges. The `@[reduction_graph]`
+attribute is the registration mechanism:
+
+```lean
+@[reduction_graph]
+def mpcpToPcp α : MPCP α ≤ₘ PCP (Ext α) := …
+```
+
+The attribute's elaborator inspects the declaration's type (expecting
+`ManyOneReduction P Q`), extracts `P` and `Q`, and adds an entry to
+the global graph. Implementation skeleton:
+
+```lean
+structure Edge where
+  source : Expr     -- P
+  target : Expr     -- Q
+  declName : Name   -- the reduction's identifier
+
+initialize reductionGraphExt :
+    SimpleScopedEnvExtension Edge (List Edge) ←
+  registerSimpleScopedEnvExtension {
+    addEntry := fun s e => e :: s
+    initial := []
+  }
+
+initialize registerBuiltinAttribute {
+  name := `reduction_graph
+  add := fun decl _ kind => MetaM.run' do
+    let info ← getConstInfo decl
+    let some (P, Q) ← extractReductionEndpoints info.type
+      | throwError "expected ManyOneReduction"
+    reductionGraphExt.add ⟨P, Q, decl⟩ kind
+}
+```
+
+### Component 2: Graph search (~150 LoC)
+
+Backward BFS from the goal node to any registered undecidability
+fact. Pseudo:
+
+```lean
+partial def searchPath (target : Expr) (depth : Nat := 10) :
+    MetaM (Option (List Edge)) := do
+  if depth = 0 then return none
+  if ← isKnownUndecidable target then return some []
+  for e in (← graph).filter (·.target ≈ target) do
+    if let some rest ← searchPath e.source (depth - 1) then
+      return some (e :: rest)
+  return none
+```
+
+Hard parts: unification across alphabet parameters (`MPCP α` vs
+`MPCP Bool`), avoiding loops, ordering edges to prefer shorter paths,
+respecting metavariable scope.
+
+### Component 3: Term emission (~200 LoC)
+
+Compose the path into `Undecidable.of_manyOne` applications:
+
+```lean
+elab "reduce" : tactic => withMainContext do
+  let some target := (← getMainTarget).getAppFnArgs.matchTarget ``Undecidable
+    | throwError "expected `Undecidable ?`"
+  let some path ← searchPath target
+    | throwError "no path found"
+  let composite ← composeReductions path
+  let knownUndec ← findUndecidabilityProof path[0]!.source
+  closeMainGoal `reduce (← mkAppM ``Undecidable.of_manyOne #[composite, knownUndec])
+```
+
+So `example : Undecidable PCP := by reduce` finds
+`Halt ≤ₘ MPCP ≤ₘ PCP`, composes, applies transfer.
+
+### Effort tiers
+
+| Tier | LoC | What works |
+|---|---|---|
+| **MVP** | ~500 | Naive search + emission; types must match literally; no unification |
+| **Useful** | ~1500 | + unification, depth bounds, user hints (`by reduce via mpcpToPcp`), helpful errors |
+| **Production** | ~3000+ | + caching, visualisation, `decide` integration, fuel parameters |
+
+### Dependency: the tactic is blocked by encoded variants
+
+For the tactic to do useful work, **every node in the graph must have
+a stable identity**. Currently `MPCP α` for varying `α` is many
+different nodes, and `Halt ≤ₘ MPCP` produces destinations whose
+alphabet depends on the input TM. The tactic would have to unify
+across these parameters, which is doable but adds substantial
+complexity to Component 2.
+
+The cleaner path is to encode every problem over a fixed alphabet
+(`List Bool`) so each problem has a single `Problem` instance with
+fixed `Input` type. Then Components 1–3 work with literal type
+matching. This is **step 1** of the immediate plan below.
+
+---
+
+## Step 1 (in progress): Encoded variants
+
+The goal is to give every Phase 2 problem a *fixed* `Input` type
+(`List Bool` or `Stack (List Bool)`), so that the reduction graph has
+unambiguous node identities.
+
+* [x] **P0** Close the deferred `trToList_getElem` lookup lemma in
+  `Halt.Encoding`. ✅ `trToList_getElem?`.
+* [x] **P0** Prove `decodeTMCode_encodeTMCode : decodeTMCode (encodeTMCode c) = some c`.
+  ✅ (`decodeTMCode` refactored to nested `match` for clean reduction).
+* [x] **P0** Define `EncodedHalt : Problem` (Input `List Bool`,
+  predicate "decoding succeeds with `(c, w)` and `c.toTM` halts on `w`").
+  ✅ in `Reduction/Encoded.lean`.
+* [x] **P0** Prove `HaltTMCode ≤ₘ EncodedHalt` and the reverse,
+  giving `HaltTMCode ≡ₘ EncodedHalt`. ✅ via `loopingTMCode` for
+  malformed inputs (which doesn't halt by `not_halts_loopingTMCode`).
+* [ ] **P1** Define `EncodedPCP : Problem` over `Stack (List Bool)`.
+  Inputs are PCP instances with `List Bool`-valued symbols. ~30 LoC.
+* [ ] **P1** Encode `mpcpToPcp` at the `List Bool` alphabet: provide
+  a "flatten" `Ext (List Bool) → List Bool` and prove that the
+  flattened PCP solution iff matches the original. ~150 LoC.
+* [ ] **P1** Wrap `halt_le_mpcp` as
+  `EncodedHalt_HUM ≤ₘ EncodedMPCP` by encoding the alphabet
+  `Alpha tm.State Bool` as `List Bool` per state index. ~250 LoC.
+* [ ] **P1** Wrap `hasSolution_iff_intersectionNonempty` as
+  `EncodedPCP ≤ₘ EncodedCFGIntersection` similarly. ~150 LoC.
+
+Total for step 1: ~770 LoC. First chunk (P0 items, ~200 LoC) is done;
+remaining P1 items (~580 LoC) extend to PCP and CFG.
+
+---
+
 ## Phase 1 — Core framework
 
 Definitions, composition laws, transfer theorems, notation, tactic.

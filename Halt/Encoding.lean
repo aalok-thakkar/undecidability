@@ -307,10 +307,65 @@ lemma trToList_length {n : ℕ}
 
 restates the encoding's canonical-order property: the flat list places
 the three entries for state `q` consecutively at positions
-`3 * q.val`, `3 * q.val + 1`, `3 * q.val + 2`, in `symbolIdx` order.
-The proof is deferred — it's needed for Phase 4 (injectivity of
-`decodeTMCode`), not for Phase 3, which can treat `encodeTMCode` as a
-black box. -/
+`3 * q.val`, `3 * q.val + 1`, `3 * q.val + 2`, in `symbolIdx` order. -/
+
+/-- **Helper**: `flatMap` indexes uniformly when every block has the
+same length. -/
+private lemma list_flatMap_fixed_getElem?
+    {α β : Type*} (l : List α) (f : α → List β) (b : ℕ)
+    (h : ∀ a ∈ l, (f a).length = b)
+    (k : ℕ) (i : ℕ) (hi : i < b) :
+    (l.flatMap f)[b * k + i]? = (l[k]?).bind fun a => (f a)[i]? := by
+  induction l generalizing k with
+  | nil => simp
+  | cons x xs ih =>
+    have hfx : (f x).length = b := h x List.mem_cons_self
+    have h_xs : ∀ a ∈ xs, (f a).length = b :=
+      fun a ha => h a (List.mem_cons_of_mem x ha)
+    simp only [List.flatMap_cons]
+    cases k with
+    | zero =>
+      simp only [Nat.mul_zero, Nat.zero_add]
+      rw [List.getElem?_append_left (by rw [hfx]; exact hi)]
+      simp
+    | succ k' =>
+      have h_pos : (f x).length ≤ b * (k' + 1) + i := by
+        rw [hfx, Nat.mul_succ]; omega
+      rw [List.getElem?_append_right h_pos]
+      have h_sub : b * (k' + 1) + i - (f x).length = b * k' + i := by
+        rw [hfx, Nat.mul_succ]; omega
+      rw [h_sub]
+      have h_ih := ih h_xs k'
+      simp only [List.getElem?_cons_succ]
+      exact h_ih
+
+/-- **Pointwise transition-table lookup.** The flat list `trToList tr`
+encodes `tr` in state-major, symbol-minor order: the entry for
+`(q, ob)` lives at position `3 * q.val + symbolIdx ob`. -/
+lemma trToList_getElem? {n : ℕ}
+    (tr : Fin (n + 1) → Option Bool → SingleTapeTM.Stmt Bool × Option (Fin (n + 1)))
+    (q : Fin (n + 1)) (ob : Option Bool) :
+    (trToList tr)[3 * q.val + symbolIdx ob]? = some (tr q ob) := by
+  have h_block_length : ∀ q' : Fin (n + 1),
+      ([tr q' none, tr q' (some false), tr q' (some true)] :
+        List (SingleTapeTM.Stmt Bool × Option (Fin (n + 1)))).length = 3 := by
+    intro _; rfl
+  have h_block_get : ∀ q' : Fin (n + 1),
+      ([tr q' none, tr q' (some false), tr q' (some true)] :
+        List (SingleTapeTM.Stmt Bool × Option (Fin (n + 1))))[symbolIdx ob]? =
+        some (tr q' ob) := by
+    intro q'
+    cases ob with
+    | none => rfl
+    | some b => cases b <;> rfl
+  unfold trToList
+  rw [list_flatMap_fixed_getElem? _ _ 3 (fun a _ => h_block_length a)
+    q.val (symbolIdx ob) (symbolIdx_lt ob)]
+  have h_finRange : (List.finRange (n + 1))[q.val]? = some q := by
+    simp [q.isLt]
+  rw [h_finRange]
+  rw [Option.bind_some]
+  exact h_block_get q
 
 /-- Encode a flat list of transition entries. -/
 def encodeTrEntries {n : ℕ}
@@ -370,23 +425,64 @@ def encodeTMCode (c : Halt.TMCode) : List Bool :=
   encodeNat c.numStates ++ encodeFin c.q₀ ++ encodeTrTable c.tr
 
 /-- Decode a `TMCode`. The decoder builds the transition function by
-list-lookup with bounds checks. -/
-def decodeTMCode (l : List Bool) : Option Halt.TMCode := do
-  let (numStates, l) ← decodeNat l
-  let (q₀, l) ← decodeFin (numStates + 1) l
-  let (entries, _) ← decodeTrTable numStates l
-  if h : entries.length = 3 * (numStates + 1) then
-    let tr : Fin (numStates + 1) → Option Bool →
-        SingleTapeTM.Stmt Bool × Option (Fin (numStates + 1)) :=
-      fun q ob =>
-        have hbound : 3 * q.val + symbolIdx ob < entries.length := by
-          have hq : q.val < numStates + 1 := q.isLt
-          have hs : symbolIdx ob < 3 := symbolIdx_lt ob
-          rw [h]; omega
-        entries[3 * q.val + symbolIdx ob]'hbound
-    some { numStates := numStates, q₀ := q₀, tr := tr }
-  else
-    none
+list-lookup with bounds checks. Uses nested `match` (rather than `do`)
+to make round-trip proofs reduce cleanly. -/
+def decodeTMCode (l : List Bool) : Option Halt.TMCode :=
+  match decodeNat l with
+  | none => none
+  | some (numStates, l₁) =>
+    match decodeFin (numStates + 1) l₁ with
+    | none => none
+    | some (q₀, l₂) =>
+      match decodeTrTable numStates l₂ with
+      | none => none
+      | some (entries, _) =>
+        if h : entries.length = 3 * (numStates + 1) then
+          let tr : Fin (numStates + 1) → Option Bool →
+              SingleTapeTM.Stmt Bool × Option (Fin (numStates + 1)) :=
+            fun q ob =>
+              have hbound : 3 * q.val + symbolIdx ob < entries.length := by
+                have hq : q.val < numStates + 1 := q.isLt
+                have hs : symbolIdx ob < 3 := symbolIdx_lt ob
+                rw [h]; omega
+              entries[3 * q.val + symbolIdx ob]'hbound
+          some { numStates := numStates, q₀ := q₀, tr := tr }
+        else
+          none
+
+/-- **Round-trip for `decodeTMCode`/`encodeTMCode`.** Together with the
+pointwise lookup `trToList_getElem?`, the standard primitive
+round-trips yield full injectivity of `encodeTMCode`. -/
+theorem decodeTMCode_encodeTMCode (c : Halt.TMCode) :
+    decodeTMCode (encodeTMCode c) = some c := by
+  obtain ⟨n, q₀, tr⟩ := c
+  have h_eq : encodeTMCode ⟨n, q₀, tr⟩ =
+      encodeNat n ++ (encodeFin q₀ ++ (encodeTrTable tr ++ [])) := by
+    simp [encodeTMCode, List.append_assoc, List.append_nil]
+  rw [h_eq]
+  unfold decodeTMCode
+  rw [decodeNat_encodeNat_append]
+  dsimp only
+  rw [decodeFin_encodeFin_append]
+  dsimp only
+  rw [decodeTrTable_encodeTrTable_append]
+  dsimp only
+  rw [dif_pos (trToList_length tr)]
+  -- Reconstructed TMCode equals the original (using funext + lookup
+  -- lemma for tr).
+  have h_tr_eq :
+      (fun (q : Fin (n + 1)) (ob : Option Bool) =>
+        (trToList tr)[3 * q.val + symbolIdx ob]'(by
+          rw [trToList_length]
+          have := q.isLt; have := symbolIdx_lt ob; omega)) = tr := by
+    funext q ob
+    have h_get := trToList_getElem? tr q ob
+    have h_bound : 3 * q.val + symbolIdx ob < (trToList tr).length := by
+      rw [trToList_length]
+      have := q.isLt; have := symbolIdx_lt ob; omega
+    rw [List.getElem?_eq_getElem h_bound] at h_get
+    exact (Option.some.inj h_get)
+  rw [h_tr_eq]
 
 end
 
