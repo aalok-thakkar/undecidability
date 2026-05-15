@@ -173,19 +173,26 @@ unambiguous node identities.
 * [x] **P0** Prove `HaltTMCode ≤ₘ EncodedHalt` and the reverse,
   giving `HaltTMCode ≡ₘ EncodedHalt`. ✅ via `loopingTMCode` for
   malformed inputs (which doesn't halt by `not_halts_loopingTMCode`).
-* [ ] **P1** Define `EncodedPCP : Problem` over `Stack (List Bool)`.
-  Inputs are PCP instances with `List Bool`-valued symbols. ~30 LoC.
-* [ ] **P1** Encode `mpcpToPcp` at the `List Bool` alphabet: provide
-  a "flatten" `Ext (List Bool) → List Bool` and prove that the
-  flattened PCP solution iff matches the original. ~150 LoC.
+* [x] **P1** Define `EncodedPCP : Problem` over `Stack (List Bool)`.
+  ✅ in `Reduction/EncodedPCP.lean`.
+* [x] **P1** Encode `mpcpToPcp` at the `List Bool` alphabet via
+  `flattenExt : Ext (List Bool) → List Bool` plus
+  `hasSolution_flattenStack_iff` (both directions, with classical
+  preimage selection for the reverse). ✅
 * [ ] **P1** Wrap `halt_le_mpcp` as
-  `EncodedHalt_HUM ≤ₘ EncodedMPCP` by encoding the alphabet
-  `Alpha tm.State Bool` as `List Bool` per state index. ~250 LoC.
-* [ ] **P1** Wrap `hasSolution_iff_intersectionNonempty` as
-  `EncodedPCP ≤ₘ EncodedCFGIntersection` similarly. ~150 LoC.
+  `EncodedHaltHUM ≤ₘ MPCP_LB` by encoding `Alpha (Fin (n+1)) Bool`
+  as `List Bool` per state index. Scaffolded but not finalised:
+  the 6-constructor injective encoding `encodeAlpha` plus
+  `MHasSolution`-preservation lemmas total ~250 LoC. The pattern is
+  the same as `flattenExt`-based proof for `EncodedPCP`. Started in
+  `Reduction/EncodedHaltMPCP.lean` (removed; needs a clean redo).
+* [x] **P1** Wrap `hasSolution_iff_intersectionNonempty` as
+  `EncodedPCP ≤ₘ EncodedCFGIntersection`. ✅ in
+  `Reduction/EncodedCFG.lean` (no further encoding needed — the
+  destination alphabet `Term (List Bool)` is already fixed).
 
-Total for step 1: ~770 LoC. First chunk (P0 items, ~200 LoC) is done;
-remaining P1 items (~580 LoC) extend to PCP and CFG.
+Total for step 1: ~770 LoC. ~580 LoC done; the remaining
+`EncodedHaltMPCP` bridge (~250 LoC) is next.
 
 ---
 

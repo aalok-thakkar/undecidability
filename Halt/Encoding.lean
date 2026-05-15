@@ -80,6 +80,13 @@ lemma decodeNat_encodeNat (n : ℕ) :
   have := decodeNat_encodeNat_append n []
   simpa using this
 
+/-- `encodeNat` is injective. -/
+lemma encodeNat_injective : Function.Injective encodeNat := by
+  intro a b h
+  have h_a := decodeNat_encodeNat a
+  rw [h, decodeNat_encodeNat] at h_a
+  simpa using h_a.symm
+
 /-! ## `Fin` — `ℕ` with a bound check -/
 
 /-- Encode a `Fin n` value as its underlying `ℕ`. The bound is
@@ -103,6 +110,12 @@ lemma decodeFin_encodeFin {n : ℕ} (k : Fin n) :
     decodeFin n (encodeFin k) = some (k, []) := by
   have := decodeFin_encodeFin_append k []
   simpa using this
+
+/-- `encodeFin` is injective. -/
+lemma encodeFin_injective {n : ℕ} : Function.Injective (@encodeFin n) := by
+  intro a b h
+  apply Fin.ext
+  exact encodeNat_injective h
 
 /-! ## `Bool` — single bit, no terminator -/
 
