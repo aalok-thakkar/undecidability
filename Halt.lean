@@ -16,6 +16,7 @@ public import Halt.CodeOf
 public import Halt.Undecidable
 public import Halt.Rice.Basic
 public import Halt.Rice.TrivialTMs
+public import Halt.Rice.Extender
 
 @[expose] public section
 
@@ -49,7 +50,12 @@ This module re-exports the public Halt-undecidability API:
   `IsSemantic`, `IsPropDecider`, and the semantic-set form.
 * `Halt.Rice.TrivialTMs` — `tm_alwaysHalt` (halts on every input) and
   `tm_loop` (loops on every input), with `SemHalt` characterisations.
+* `Halt.Rice.Extender`  — `riceConstTM : TMCode → SingleTapeTM Bool`,
+  the constant-Sem reduction TM: ignores its input, writes
+  `encodeTMCode c` to the tape, and simulates `c.toTM` on it. Halts
+  iff `c.toTM` halts on `encodeTMCode c`, regardless of input.
 
-The main Rice theorem (every non-trivial semantic property of TMs is
-undecidable) is the next milestone; see `Halt/ROADMAP.md`.
+The behaviour theorem `SemHalt (riceConstTM c) = univ ↔ Halts c.toTM
+(encodeTMCode c)` and the main Rice theorem (`Halt.Rice.Theorem`,
+TBD) are the next milestones; see `Halt/ROADMAP.md`.
 -/

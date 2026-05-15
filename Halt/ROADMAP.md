@@ -108,19 +108,30 @@ Files under [`Rice/`](Rice/):
 * `Rice.TrivialTMs` ✅ — concrete witnesses `tm_alwaysHalt` (halts on
   every input) and `tm_loop` (loops on every input), with
   `SemHalt = univ` and `SemHalt = ∅` respectively.
-* `Rice.Extender` 🚧 — the construction `riceTM : TMCode →
-  SingleTapeTM Bool → SingleTapeTM Bool` such that, for any `c` and
-  target `tm`:
-    `SemHalt (riceTM c tm) = SemHalt tm`        if `c.toTM` halts on
-                                                  `encodeTMCode c`,
-    `SemHalt (riceTM c tm) = ∅`                  otherwise.
-  Requires preserving the input through a halt-test on `c`, which over
-  the Bool alphabet means careful tape-region management. Estimated
-  ~500–700 LoC.
-* `Rice.Theorem` 🚧 — derives Rice's theorem (predicate form) by
-  reducing K-decidability to `IsPropDecider`-decidability via
-  `riceTM`. Semantic-set form follows immediately from the predicate
-  form plus `liftClassProp_isSemantic`. Estimated ~100–150 LoC.
+* `Rice.Extender` ✅ — the *constant-Sem* reduction TM
+  `riceConstTM : TMCode → SingleTapeTM Bool`. The construction is
+  four-phase: erase the input, write `encodeTMCode c` past the erased
+  region, move the head back to the start of the written code, then
+  simulate `c.toTM`. After the move-back phase, the layout is
+  isomorphic (via position offset) to `initCfg c.toTM (encodeTMCode c)`,
+  so the simulation phase is behaviourally identical to running
+  `c.toTM` on `encodeTMCode c`.
+
+  *Construction is complete; the behaviour theorem*
+
+      `SemHalt (riceConstTM c) = univ ↔ Halts c.toTM (encodeTMCode c)`
+
+  *requires a four-phase bisimulation argument and is the next chunk.*
+
+* `Rice.Theorem` 🚧 — once the behaviour theorem is established,
+  *Restricted Rice* (Rice for properties that distinguish
+  `tm_alwaysHalt` from `tm_loop`) follows by reducing K-decidability
+  to `IsPropDecider`-decidability via `riceConstTM`. Concrete
+  corollaries: "halts on `[]`", "halts on at least one input",
+  "halts on all inputs", "halts on no inputs", etc. — all undecidable.
+  Full Rice (arbitrary semantic witnesses) needs an
+  *input-preserving* extender (a more elaborate construction with
+  scratch space).
 
 ## Other deferred items
 
