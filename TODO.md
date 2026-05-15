@@ -104,7 +104,21 @@ initialize registerBuiltinAttribute {
 }
 ```
 
-### Component 2: Graph search (~150 LoC)
+### Component 2: Graph search (~150 LoC) ✅
+
+**Landed** in `Reduction/Search.lean`. Depth-bounded backward DFS via
+`searchPath : Expr → MetaM (Option Path)`. Terminates at registered
+`@[undecidable_anchor]` proofs (also in `Reduction/Graph.lean`).
+Polymorphic edges are handled by `instantiateEndpoint` — stored lambda
+endpoints are applied to fresh metavariables before `isDefEq`.
+
+Smoke test in `Reduction/Smoke.lean` finds:
+* `EncodedHaltMPCP` (0 edges, direct anchor)
+* `MPCP_LB` (1 edge)
+* `EncodedPCP` (2 edges)
+* `EncodedCFGIntersection` (3 edges)
+
+Original spec:
 
 Backward BFS from the goal node to any registered undecidability
 fact. Pseudo:

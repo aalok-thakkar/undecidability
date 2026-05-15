@@ -11,6 +11,7 @@ public import Reduction.Composition
 public import Reduction.Transfer
 public import Reduction.Notation
 public import Reduction.Graph
+public import Reduction.Search
 public import Reduction.Instances
 public import Reduction.Encoded
 public import Reduction.StackMap
@@ -65,11 +66,15 @@ gap to a fully end-to-end undecidability transfer from `HaltTM`.
 ## Tactic infrastructure
 
 * `Reduction.Graph`          — `Edge` record, persistent env extension,
-                                and the `@[reduction_graph]` attribute
-                                that registers `ManyOneReduction P Q`
-                                declarations into the graph. Component 1
-                                of the `by reduce` tactic.
+                                `@[reduction_graph]` attribute, plus
+                                anchors (`@[undecidable_anchor]`).
+                                Component 1.
+* `Reduction.Search`         — depth-bounded backward DFS from a target
+                                `Problem` to an anchor, with cycle
+                                detection and metavariable
+                                instantiation for polymorphic edges.
+                                Component 2.
 
-The graph search (Component 2) and term emission (Component 3) are
-planned next.
+Term emission (Component 3) — composing the path into a
+`Undecidable target` proof via `Undecidable.of_manyOne` — is planned next.
 -/

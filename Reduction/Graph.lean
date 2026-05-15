@@ -117,4 +117,66 @@ def formatGraph : CoreM Format := do
       f!"{e.declName} : {e.source} ≤ₘ {e.target}")
     Format.line
 
+/-! ## Anchors
+
+A `Problem` is *known-undecidable* iff there's a proof of
+`Undecidable P` for it. The `@[undecidable_anchor]` attribute marks
+such proofs so the search (Component 2) can terminate on them. -/
+
+/-- A known-undecidable anchor: a `Problem` (as an `Expr`) together
+with the name of a `Undecidable P` proof. -/
+structure Anchor where
+  /-- The anchor `Problem`. -/
+  problem : Expr
+  /-- The Lean name of the `Undecidable problem` proof. -/
+  proofName : Name
+  deriving Inhabited
+
+/-- The persistent env extension holding all registered anchors. -/
+initialize anchorExt :
+    SimplePersistentEnvExtension Anchor (List Anchor) ←
+  registerSimplePersistentEnvExtension {
+    addEntryFn := (·.cons)
+    addImportedFn := mkStateFromImportedEntries (·.cons) {}
+  }
+
+/-- Register a new undecidability anchor. -/
+def addAnchor (a : Anchor) : CoreM Unit :=
+  modifyEnv fun env => anchorExt.addEntry env a
+
+/-- Get all currently registered undecidability anchors. -/
+def getAnchors : CoreM (List Anchor) :=
+  return anchorExt.getState (← getEnv)
+
+/-- Extract `P` from a type of the form `∀ ..., Undecidable P`. Uses
+the non-reducing `forallTelescope` to avoid unfolding `Undecidable` to
+its `¬ Decidable` definition. -/
+def extractUndecidable (type : Expr) : MetaM (Option Expr) := do
+  forallTelescope type fun args body => do
+    let body := body.consumeMData
+    let (name, redArgs) := body.getAppFnArgs
+    if name = ``DiagonaLean.Undecidable && redArgs.size = 1 then
+      let problem ← mkLambdaFVars args redArgs[0]!
+      return some problem
+    else
+      return none
+
+/-- Process a `@[undecidable_anchor]` declaration. -/
+def onAnchorAdd (decl : Name) : MetaM Unit := do
+  let info ← getConstInfo decl
+  match ← extractUndecidable info.type with
+  | some problem =>
+    addAnchor ⟨problem, decl⟩
+  | none =>
+    throwError "@[undecidable_anchor]: expected declaration of type \
+      `Undecidable P` (possibly under binders), got: {info.type}"
+
+initialize undecidabilityAnchorAttr : ParametricAttribute Unit ←
+  registerParametricAttribute {
+    name := `undecidable_anchor
+    descr := "Marks a proof of `Undecidable P` as a search anchor for " ++
+             "the DiagonaLean `by reduce` tactic."
+    getParam := fun decl _stx => MetaM.run' (onAnchorAdd decl)
+  }
+
 end DiagonaLean.ReductionGraph
