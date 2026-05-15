@@ -12,6 +12,7 @@ public import Reduction.Transfer
 public import Reduction.Notation
 public import Reduction.Instances
 public import Reduction.Encoded
+public import Reduction.EncodedPCP
 
 @[expose] public section
 
