@@ -1,109 +1,148 @@
-# Roadmap
+# Architecture and proof chain
 
-The reduction chain
+This document describes the proof architecture of the results currently
+landed in the repository. For the project vision see
+[`README.md`](README.md); for the forward-looking work plan see
+[`TODO.md`](TODO.md).
+
+The reductions assembled here form the spine of the eventual
+DiagonaLean reduction graph:
 
 ```
 Halt  ≤_m  MPCP  ≤_m  PCP  ≤_m  CFG-Intersection-Nonempty
 ```
 
-is closed end-to-end as iffs in this repository. The halting-problem
-undecidability is proved separately as `Halt.halt_undecidable`. This
-file records the architecture; for the entry point see
-[`README.md`](README.md).
+plus the stand-alone proof that the halting problem itself is
+undecidable for cslib's `SingleTapeTM Bool`. All edges of this chain
+are closed as iffs.
 
-## ✅ Complete in this repo
+## Anchor nodes
 
-### `MPCP ≤_m PCP` — [`PCP/Reduction.lean`](PCP/Reduction.lean)
-The full `mpcp_iff_pcp` equivalence via the Hopcroft–Ullman
-symbol-padding reduction (alphabet `Ext`, `hashL`/`hashR` interleaving,
-three tile classes `tileStart`/`tileReg`/`tileEnd`, `match_start`,
-and the complete forward and backward directions).
+### Halting problem — [`Halt/Undecidable.lean`](Halt/Undecidable.lean)
 
-### `Halts` predicate — [`PCP/Halt.lean`](PCP/Halt.lean)
-`Halts tm w` and `HaltsWithinTime tm w n` for cslib's
-`Turing.SingleTapeTM`, with their equivalence.
-
-### `Halt ≤_m MPCP` — [`PCP/Reductions/HaltToMPCP.lean`](PCP/Reductions/HaltToMPCP.lean)
-Forward and backward directions of the canonical iff
-`Halts tm w ↔ MHasSolution (startTile tm w) (haltTiles tm)`
-under the HUM side conditions `NoBlankWrites` and `NoLeftBoundary`.
-The forward direction interleaves step-simulation tile groups; the
-backward direction inverts via per-tile forcing lemmas plus a
-chain-tracked configuration queue.
-
-### `Halt ≤_m PCP` (composition) — [`PCP/Reductions/HaltToPCP.lean`](PCP/Reductions/HaltToPCP.lean)
-```lean
-theorem halts_iff_pcp (tm : SingleTapeTM Symbol) (w : List Symbol)
-    (h_nbw : NoBlankWrites tm) (h_nlb : NoLeftBoundary tm w) :
-    Halts tm w ↔ HasSolution (mpcpToPcp (startTile tm w) (haltTiles tm))
-```
-Transitive composition of `halt_le_mpcp` with `mpcp_iff_pcp`.
-
-### `PCP ≤_m CFG-Intersection-Nonempty` — [`CFG/PcpReduction.lean`](CFG/PcpReduction.lean)
-```lean
-theorem hasSolution_iff_intersectionNonempty (P : Stack α) :
-    HasSolution P ↔ ∃ w, w ∈ (topCFG P).language ∧ w ∈ (botCFG P).language
-```
-Two context-free grammars over `α ⊕ Tile α` whose intersection is
-non-empty iff the PCP instance has a solution. Uses Mathlib's
-`ContextFreeGrammar` (cslib has no CFG framework).
-
-### Halting-problem undecidability — [`Halt/Undecidable.lean`](Halt/Undecidable.lean)
 ```lean
 theorem halt_undecidable :
     ¬ ∃ D : SingleTapeTM Bool, IsSelfHaltDecider D
 ```
+
 No `SingleTapeTM Bool` decides the self-halt problem
 `K = { c : TMCode | c.toTM halts on encodeTMCode c }`. Proved via a
-*compositional* diagonal: build `diagTM D` by inlining the
+compositional diagonal: build `diagTM D` by inlining the
 "simulate-then-invert" pattern as a single TM, apply
 `Halt.CodeOf.halts_codeOf_iff` plus deterministic confluence on
 `ReflTransGen` to derive a contradiction. See
 [`Halt/ROADMAP.md`](Halt/ROADMAP.md) for the detailed construction.
 
-## 🚧 Optional follow-ups
+### MPCP ≤_m PCP — [`PCP/Reduction.lean`](PCP/Reduction.lean)
 
-These are not on the critical path of any current theorem; they are
-recorded for completeness.
+Full `mpcp_iff_pcp` via the Hopcroft–Ullman symbol-padding
+construction (alphabet extension, `hashL`/`hashR` interleaving, three
+tile classes `tileStart`/`tileReg`/`tileEnd`, `match_start`, both
+directions).
 
-### HUM normalisation
+### Halt ≤_m MPCP — [`PCP/Reductions/HaltToMPCP.lean`](PCP/Reductions/HaltToMPCP.lean)
 
-`halts_iff_pcp` carries side conditions `NoBlankWrites tm` and
-`NoLeftBoundary tm w`. A normalisation pass
+The bulk of the project (~4100 LoC). Both directions of the canonical
+iff `Halts tm w ↔ MHasSolution (startTile tm w) (haltTiles tm)` under
+the HUM side conditions `NoBlankWrites` and `NoLeftBoundary`.
+
+* **Forward**: interleave step-simulation tile groups
+  (`stepTilesNoMove`, `stepTilesRightInterior`, `stepTilesRightBoundary`,
+  `stepTilesLeftInterior`) over the halting trace, closing with
+  `absorbAndFinish`.
+* **Backward (strong-A form)**: `halt_le_mpcp_strong` via strong
+  induction on `A.length`. Per-tile forcing lemmas
+  (`mem_haltTiles_top`, `copy_prefix_forced`, `transition_forced`,
+  `sep_forced`, `no_tile_for_state_sharp`, etc.) identify each tile
+  uniquely from its top character. The halt-now sub-case is handled
+  directly to sidestep the non-unique absorption-phase decomposition.
+* **Backward (canonical form)**: `halt_le_mpcp` extends to
+  `A ⊆ startTile :: haltTiles tm` via `backward_aux_weak` threading a
+  chain-tracked configuration queue.
+
+### Halt ≤_m PCP — [`PCP/Reductions/HaltToPCP.lean`](PCP/Reductions/HaltToPCP.lean)
 
 ```lean
-theorem hum_normalise (tm : SingleTapeTM Symbol) (w : List Symbol) :
-    ∃ tm' w', NoBlankWrites tm' ∧ NoLeftBoundary tm' w'
-            ∧ (Halts tm w ↔ Halts tm' w')
+theorem halts_iff_pcp (tm : SingleTapeTM Symbol) (w : List Symbol)
+    (h_nbw : NoBlankWrites tm) (h_nlb : NoLeftBoundary tm w) :
+    Halts tm w ↔
+    HasSolution (mpcpToPcp (startTile tm w) (haltTiles tm)) :=
+  (halt_le_mpcp tm h_nbw w h_nlb).trans (mpcp_iff_pcp _ _)
 ```
 
-would lift these. The standard construction: shift the tape by one
-cell to introduce a sentinel marker; refuse to write blanks
-(`NoBlankWrites`); refuse to move off the sentinel (`NoLeftBoundary`).
-Estimated ~500–1000 LoC; not started.
+Composition of the two iffs.
 
-### HALT_TM (pair-form) undecidability
+### PCP ≤_m CFG-Intersection-Nonempty — [`CFG/PcpReduction.lean`](CFG/PcpReduction.lean)
 
-`halt_undecidable` is for the self-halt form `K`. To extend to the
-pair form `HALT_TM = { (c, w) | c.toTM halts on w }`, the cleanest
-route is `K ≤_m HALT_TM` via a `dupTM`-style construction that on
-input `c` produces `encodePair c c`. Estimated ~200 LoC.
+```lean
+theorem hasSolution_iff_intersectionNonempty (P : Stack α) :
+    HasSolution P ↔ ∃ w, w ∈ (topCFG P).language ∧ w ∈ (botCFG P).language
+```
 
-### `decodeTMCode` left-inverse
+For each tile `t ∈ P`, two production rules over alphabet `α ⊕ Tile α`:
 
-`Halt.Encoding` proves `decodeTMCode (encodeTMCode c)` is *defined* but
-not yet that it equals `some c`. Closing this requires the pointwise
-lookup `(trToList tr)[3 * q.val + symbolIdx ob] = tr q ob`. Used only
-for full injectivity, not for `halt_undecidable`.
+| Grammar  | Recursive rule                       | Base rule                   |
+|----------|--------------------------------------|-----------------------------|
+| `topCFG` | `S → t.top.inl ++ S ++ [.inr t]`     | `S → t.top.inl ++ [.inr t]` |
+| `botCFG` | `S → t.bot.inl ++ S ++ [.inr t]`     | `S → t.bot.inl ++ [.inr t]` |
 
-## Scope
+A derivation traces a tile sequence `[t₁, …, t_k]` and emits
+`(tau_proj A).map .inl ++ A.reverse.map .inr`. The reverse order of
+markers forces both grammars to commit to the same sequence; the
+`.inl`/`.inr` alphabet split lets us recover the PCP witness uniquely
+via `list_inl_inr_split`.
 
-The Coq counterpart in
-[`coq-library-undecidability`](https://github.com/uds-psl/coq-library-undecidability)
-runs to roughly 1500 lines for the `Halt ≤_m MPCP ≤_m PCP` chain alone.
-Our Lean development reaches ~4200 lines for the same content (more
-verbose decidability/structural plumbing). The Halt-undecidability
-module adds ~1425 LoC; the CFG module adds another ~660 LoC.
+## Encoding infrastructure
+
+`Halt/` provides the encoding pipeline used by the halting-problem
+diagonal:
+
+* **`Halt.TMCode`** — normalised TM record (alphabet `Bool`, state set
+  `Fin (n + 1)`) with `TMCode.toTM : TMCode → SingleTapeTM Bool`.
+* **`Halt.Encoding`** — self-delimiting bit encoding
+  `encodeTMCode : TMCode → List Bool` with round-trip lemmas at every
+  layer.
+* **`Halt.CodeOf`** — generic state-renaming
+  `codeOf : SingleTapeTM Bool → TMCode` with the bisimulation theorem
+  `halts_codeOf_iff : Halts (codeOf tm).toTM w ↔ PCP.Halts tm w`. The
+  bisim goes through an `Equiv` of `Cfg`s plus `step`-commutation,
+  lifted to `ReflTransGen` via `Relation.ReflTransGen.lift`.
+
+`Halt.Diagonal` isolates the purely-logical kernel — Cantor's theorem
+and the abstract self-referential contradiction — independently of
+any computation model.
+
+## In progress: Rice's theorem
+
+`Halt/Rice/` contains the scaffolding for Rice's theorem.
+
+* `Rice.Basic` defines `SemHalt`, `BehaviourEquiv`, `IsSemantic`,
+  `IsPropDecider`, `NonTrivial`, and the semantic-set form
+  (`BehaviourClassProp` + `liftClassProp`).
+* `Rice.TrivialTMs` provides the witnesses `tm_alwaysHalt`
+  (`SemHalt = univ`) and `tm_loop` (`SemHalt = ∅`).
+* `Rice.Extender` defines `riceConstTM : TMCode → SingleTapeTM Bool`,
+  the four-phase TM (erase → write `encodeTMCode c` → move back →
+  simulate `c.toTM`). The construction is complete; the behaviour
+  theorem `SemHalt (riceConstTM c) = univ ↔ Halts c.toTM
+  (encodeTMCode c)` (four-phase bisimulation) is the next chunk.
+
+See [`Halt/ROADMAP.md`](Halt/ROADMAP.md) for the construction-level
+notes specific to `Halt/`.
+
+## What's deferred
+
+Not on the critical path of any current theorem; recorded for
+completeness. The forward-looking plan, including how to lift these
+into the DiagonaLean framework, lives in [`TODO.md`](TODO.md).
+
+* **HUM normalisation** removes the `NoBlankWrites` / `NoLeftBoundary`
+  side conditions from `halts_iff_pcp`.
+* **`HALT_TM` (pair-form)** undecidability via `K ≤_m HALT_TM`.
+* **`decodeTMCode` left-inverse** completion in `Halt.Encoding`
+  (requires the deferred pointwise `trToList` lookup lemma).
+* **Symbol-to-Bool simulation** bridge for general-alphabet
+  undecidability.
 
 ## Build invariant
 

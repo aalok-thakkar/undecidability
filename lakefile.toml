@@ -1,4 +1,4 @@
-name = "undecidability"
+name = "DiagonaLean"
 version = "0.1.0"
 defaultTargets = ["PCP", "CFG", "Halt", "pcp"]
 
