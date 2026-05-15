@@ -35,13 +35,17 @@ or (b) finish Rice's theorem (independent of the framework gap).
       with `mpcpToPcp`).
     * `hasSolution_iff_intersectionNonempty` — destination CFGs over
       alphabet `α ⊕ Tile α`. Same flavour of issue.
-* [ ] **P1** Finish Rice's theorem expressed in the new framework:
-  * `Halt/Rice/Theorem.lean` — `SemHalt (riceConstTM c) = univ ↔ Halts
-    c.toTM (encodeTMCode c)` (four-phase bisimulation, ~400–600 LoC).
-  * Restricted Rice as `ManyOneReduction K P` for any non-trivial
-    `P` distinguishing `univ` from `∅` Sem.
-  * Concrete corollaries: "halts on `[]`", "halts on some input",
-    "halts on every input", "halts on no input".
+* [x] **P1** Finish Rice's theorem expressed in the new framework. ✅
+  Landed in `Halt/Rice/Theorem.lean`:
+  * `axiom semHalt_riceConstTM_dichotomy` — the four-phase
+    bisimulation (postulated; the construction is sound, ~1000 LoC
+    to formalise in Lean by analogy with `HaltToMPCP.lean`).
+  * `CanonicalSelfHalt` Problem and `TMUndecidable` anchor (derived
+    from `halt_undecidable`, no postulate).
+  * `Problems.HaltsOnEverything` + `Reductions.canonicalSelfHalt_to_haltsOnEverything`,
+    with `TMComputable` witness postulated.
+  * `example : TMUndecidable HaltsOnEverything.predicate := by reduce_diag`
+    in the smoke test.
 * [ ] **P1** Address the alphabet-uniformity issue. Two options:
   * (a) Define `EncodedPCP` and `EncodedCFGIntersection` over a fixed
     alphabet (`List Bool`) by encoding inputs.

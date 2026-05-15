@@ -17,6 +17,7 @@ public import Halt.Undecidable
 public import Halt.Rice.Basic
 public import Halt.Rice.TrivialTMs
 public import Halt.Rice.Extender
+public import Halt.Rice.Theorem
 
 @[expose] public section
 

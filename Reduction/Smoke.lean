@@ -9,6 +9,7 @@ public import Lean
 public import Reduction
 public import Reduction.Search
 public import Reduction.Tactic
+public import Halt.Rice.Theorem
 
 public meta section
 
@@ -86,3 +87,13 @@ example : TMUndecidable EncodedHaltMPCP.predicate := by reduce_diag
 example : TMUndecidable EncodedMPCP_LB.predicate := by reduce_diag
 example : TMUndecidable EncodedPCP_LB.predicate := by reduce_diag
 example : TMUndecidable EncodedCFGI_LB.predicate := by reduce_diag
+
+/-! ### Rice's theorem (restricted form): `HaltsOnEverything`
+
+Anchored at `CanonicalSelfHalt.predicate` (TM-undecidable from
+`halt_undecidable`, no postulate), via the Rice reduction
+`canonicalSelfHalt_to_haltsOnEverything` (postulated `semHalt_riceConstTM_dichotomy`
++ `TMComputable`). -/
+
+example : TMUndecidable CanonicalSelfHalt.predicate := by reduce_diag
+example : TMUndecidable HaltsOnEverything.predicate := by reduce_diag
