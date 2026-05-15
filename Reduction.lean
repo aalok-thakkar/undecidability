@@ -13,6 +13,7 @@ public import Reduction.Notation
 public import Reduction.Instances
 public import Reduction.Encoded
 public import Reduction.EncodedPCP
+public import Reduction.EncodedCFG
 
 @[expose] public section
 
