@@ -57,7 +57,16 @@ reduction graph is the most distinctive deliverable of DiagonaLean.
 It splits into three components, in dependency order. The first two
 are plumbing; the third is where the proof-search magic happens.
 
-### Component 1: `@[reduction_graph]` attribute (~100 LoC)
+### Component 1: `@[reduction_graph]` attribute (~100 LoC) ✅
+
+**Landed** in `Reduction/Graph.lean`. The seven existing reductions
+(`mpcpToPcp`, `haltTM_to_haltTMCode`, `haltTMCode_to_encodedHalt`,
+`encodedHalt_to_haltTMCode`, `mpcpLB_to_encodedPCP`,
+`encodedHaltMPCP_to_mpcpLB`, `encodedPCP_to_encodedCFGIntersection`)
+are tagged and registered. `Reduction.Smoke` `#eval`s the graph to
+confirm registration.
+
+Original spec:
 
 The reduction graph is an `Environment` extension that maps
 `Problem`-term keys to outgoing edges. The `@[reduction_graph]`
@@ -179,20 +188,28 @@ unambiguous node identities.
   `flattenExt : Ext (List Bool) → List Bool` plus
   `hasSolution_flattenStack_iff` (both directions, with classical
   preimage selection for the reverse). ✅
-* [ ] **P1** Wrap `halt_le_mpcp` as
-  `EncodedHaltHUM ≤ₘ MPCP_LB` by encoding `Alpha (Fin (n+1)) Bool`
-  as `List Bool` per state index. Scaffolded but not finalised:
-  the 6-constructor injective encoding `encodeAlpha` plus
-  `MHasSolution`-preservation lemmas total ~250 LoC. The pattern is
-  the same as `flattenExt`-based proof for `EncodedPCP`. Started in
-  `Reduction/EncodedHaltMPCP.lean` (removed; needs a clean redo).
+* [x] **P1** Generic `StackMap` module for per-symbol alphabet
+  shifts: `mapTile`/`mapStack`, `tau` commutativity, injectivity,
+  `HasSolution`/`MHasSolution` preservation under any injective
+  `σ : α → β`. ✅ in `Reduction/StackMap.lean`. `EncodedPCP` now
+  specialises at `σ = flattenExt`, dropping ~120 LoC of duplication.
+* [x] **P1** Wrap `halt_le_mpcp` as `EncodedHaltMPCP ≤ₘ MPCP_LB` via
+  `encodeAlpha : Alpha (Fin (n+1)) Bool → List Bool` (tag-prefix
+  injection with a `decodeAlpha` left inverse) composed with
+  `StackMap.mhasSolution_mapStack_iff`. ✅ in
+  `Reduction/EncodedHaltMPCP.lean`. Malformed / non-normalised inputs
+  route to a `noSolutionSentinel` `(Tile, Stack)` pair admitting no
+  `MHasSolution`. The `NoBlankWrites ∧ NoLeftBoundary` conditions are
+  baked into the predicate — see HUM normalisation below for the
+  remaining `EncodedHalt ≤ₘ EncodedHaltMPCP` bridge.
 * [x] **P1** Wrap `hasSolution_iff_intersectionNonempty` as
   `EncodedPCP ≤ₘ EncodedCFGIntersection`. ✅ in
   `Reduction/EncodedCFG.lean` (no further encoding needed — the
   destination alphabet `Term (List Bool)` is already fixed).
 
-Total for step 1: ~770 LoC. ~580 LoC done; the remaining
-`EncodedHaltMPCP` bridge (~250 LoC) is next.
+Step 1 **landed** (~770 LoC). The chain
+`EncodedHaltMPCP ≤ₘ MPCP_LB ≤ₘ EncodedPCP ≤ₘ EncodedCFGIntersection`
+runs end-to-end at fixed `List Bool`-flavoured types.
 
 ---
 

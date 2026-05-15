@@ -6,6 +6,7 @@ Authors: Aalok Thakkar
 module
 
 public import Reduction.Notation
+public import Reduction.Graph
 public import Reduction.StackMap
 public import Reduction.EncodedPCP
 public import Halt.Pair
@@ -217,6 +218,7 @@ noncomputable def encodedHaltMPCP_to_mpcpLB_f
 `halt_le_mpcp` with `StackMap.mhasSolution_mapStack_iff` at
 `σ = encodeAlpha`. Malformed or non-normalised inputs route to
 `noSolutionSentinel`, whose `MHasSolution` is `False`. -/
+@[reduction_graph]
 noncomputable def encodedHaltMPCP_to_mpcpLB :
     ManyOneReduction EncodedHaltMPCP MPCP_LB where
   f := encodedHaltMPCP_to_mpcpLB_f

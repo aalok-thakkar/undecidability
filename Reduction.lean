@@ -10,6 +10,7 @@ public import Reduction.Basic
 public import Reduction.Composition
 public import Reduction.Transfer
 public import Reduction.Notation
+public import Reduction.Graph
 public import Reduction.Instances
 public import Reduction.Encoded
 public import Reduction.StackMap
@@ -60,4 +61,15 @@ The chain
 runs end-to-end. The missing edge `EncodedHalt ≤ₘ EncodedHaltMPCP`
 (TM normalisation to `NoBlankWrites ∧ NoLeftBoundary`) is the remaining
 gap to a fully end-to-end undecidability transfer from `HaltTM`.
+
+## Tactic infrastructure
+
+* `Reduction.Graph`          — `Edge` record, persistent env extension,
+                                and the `@[reduction_graph]` attribute
+                                that registers `ManyOneReduction P Q`
+                                declarations into the graph. Component 1
+                                of the `by reduce` tactic.
+
+The graph search (Component 2) and term emission (Component 3) are
+planned next.
 -/

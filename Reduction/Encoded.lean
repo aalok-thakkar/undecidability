@@ -6,6 +6,7 @@ Authors: Aalok Thakkar
 module
 
 public import Reduction.Instances
+public import Reduction.Graph
 public import Halt.Pair
 
 @[expose] public section
@@ -125,6 +126,7 @@ open DiagonaLean.Problems
 /-- `HaltTMCode ≤ₘ EncodedHalt`: encode the pair. The spec is direct
 from the round-trip lemmas `decodePair_encodePair` and
 `decodeTMCode_encodeTMCode`. -/
+@[reduction_graph]
 def haltTMCode_to_encodedHalt : ManyOneReduction HaltTMCode EncodedHalt where
   f := fun ⟨c, w⟩ => Halt.Pair.encodePair (Halt.Encoding.encodeTMCode c) w
   spec := fun ⟨c, w⟩ => by
@@ -143,6 +145,7 @@ def haltTMCode_to_encodedHalt : ManyOneReduction HaltTMCode EncodedHalt where
 /-- `EncodedHalt ≤ₘ HaltTMCode`: decode the bits. Malformed inputs
 map to `(loopingTMCode, [])`, which doesn't halt — preserving the
 `predicate` since malformed inputs are `False` on the encoded side. -/
+@[reduction_graph]
 noncomputable def encodedHalt_to_haltTMCode :
     ManyOneReduction EncodedHalt HaltTMCode where
   f := fun bits =>

@@ -6,6 +6,7 @@ Authors: Aalok Thakkar
 module
 
 public import Reduction.EncodedPCP
+public import Reduction.Graph
 public import CFG.Basic
 public import CFG.PcpReduction
 
@@ -50,6 +51,7 @@ open DiagonaLean.Problems
 /-- `EncodedPCP ≤ₘ EncodedCFGIntersection`: a PCP instance maps to
 the `(topCFG, botCFG)` pair from `CFG.PcpReduction`. The spec is
 `hasSolution_iff_intersectionNonempty`. -/
+@[reduction_graph]
 def encodedPCP_to_encodedCFGIntersection :
     ManyOneReduction EncodedPCP EncodedCFGIntersection where
   f := fun P => (CFG.PcpReduction.topCFG P, CFG.PcpReduction.botCFG P)

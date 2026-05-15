@@ -6,6 +6,7 @@ Authors: Aalok Thakkar
 module
 
 public import Reduction.Notation
+public import Reduction.Graph
 public import Reduction.StackMap
 public import PCP.Basic
 public import PCP.MPCP
@@ -115,6 +116,7 @@ open DiagonaLean.Problems
 /-- `MPCP_LB ≤ₘ EncodedPCP`: compose `mpcp_iff_pcp` at `α = List Bool`
 with the `flattenStack` solution-preservation. The reducing function
 is `(c, P) ↦ flattenStack (mpcpToPcp c P)`. -/
+@[reduction_graph]
 def mpcpLB_to_encodedPCP : ManyOneReduction MPCP_LB EncodedPCP where
   f := fun ⟨c, P⟩ => DiagonaLean.flattenStack (PCP.mpcpToPcp c P)
   spec := fun ⟨c, P⟩ => by

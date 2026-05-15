@@ -6,6 +6,7 @@ Authors: Aalok Thakkar
 module
 
 public import Reduction.Notation
+public import Reduction.Graph
 public import PCP.Basic
 public import PCP.MPCP
 public import PCP.Reduction
@@ -79,6 +80,7 @@ open DiagonaLean.Problems
 
 /-- `MPCP α ≤ₘ PCP (Ext α)`. The reducing function is `mpcpToPcp` and
 the spec is `mpcp_iff_pcp`. -/
+@[reduction_graph]
 def mpcpToPcp (α : Type) [DecidableEq α] :
     ManyOneReduction (MPCP α) (PCP (PCP.Ext α)) where
   f := fun ⟨c, P⟩ => PCP.mpcpToPcp c P
@@ -87,6 +89,7 @@ def mpcpToPcp (α : Type) [DecidableEq α] :
 /-- `HaltTM ≤ₘ HaltTMCode`. The reducer sends `(tm, w)` to
 `(codeOf tm, w)`; the spec is `halts_codeOf_iff` (backward direction
 of the iff). -/
+@[reduction_graph]
 noncomputable def haltTM_to_haltTMCode :
     ManyOneReduction HaltTM HaltTMCode where
   f := fun ⟨tm, w⟩ => (Halt.codeOf tm, w)
