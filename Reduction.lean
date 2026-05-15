@@ -20,6 +20,7 @@ public import Reduction.HaltUndecidable
 public import Reduction.StackMap
 public import Reduction.EncodedPCP
 public import Reduction.EncodedHaltMPCP
+public import Reduction.EncodedHaltNormalised
 public import Reduction.EncodedCFG
 public import Reduction.StackEncoding
 public import Reduction.EncodedLB
