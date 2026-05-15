@@ -11,27 +11,30 @@ proofs see [`ROADMAP.md`](ROADMAP.md).
 
 ## Immediate next chunk
 
-The Phase 1 framework is the bottleneck for everything else. Rice's
-theorem (the natural next Phase 2 deliverable) fits the framework
-cleanly once the framework exists, and the existing iffs all want to be
-re-packaged as `ManyOneReduction` instances. So the highest leverage
-is to define the framework now.
+Phase 1 framework MVP is **landed**. The next high-leverage item is
+either (a) wrap the remaining existing iffs as reductions, which is
+gated by an alphabet-uniformity issue (see "Cross-cutting" below),
+or (b) finish Rice's theorem (independent of the framework gap).
 
-* [ ] **P0** `Reduction/Basic.lean` — `Problem`, `ManyOneReduction`,
-  `TuringReduction` records. ~80 LoC.
-* [ ] **P0** `Reduction/Composition.lean` — `.trans` for both reduction
-  flavours; identity reductions; the contravariant action on
-  `Decidable`. ~120 LoC.
-* [ ] **P0** `Reduction/Transfer.lean` — `Undecidable P₁ →
-  ManyOneReduction P₁ P₂ → Undecidable P₂` plus contrapositive forms.
-  ~60 LoC.
-* [ ] **P1** Re-package existing iffs as `ManyOneReduction` instances:
-  * `mpcp_iff_pcp` → `mpcp_le_pcp : ManyOneReduction MPCP PCP`.
-  * `halt_le_mpcp` → `halt_le_mpcp : ManyOneReduction Halt MPCP`.
-  * `halts_iff_pcp` → derived via composition.
-  * `hasSolution_iff_intersectionNonempty` → `pcp_le_cfgIntersection`.
-  * `halts_codeOf_iff` → `codeOf` becomes a reduction.
-  ~150 LoC total.
+* [x] **P0** `Reduction/Basic.lean` — `Problem`, `ManyOneReduction`,
+  `Decidable`, `Undecidable`. ✅
+* [x] **P0** `Reduction/Composition.lean` — `.id`, `.trans`,
+  identity/assoc lemmas, `ofInverse`. ✅
+* [x] **P0** `Reduction/Transfer.lean` — `Decidable.of_manyOne` and
+  `Undecidable.of_manyOne`. ✅
+* [x] **P0** `Reduction/Notation.lean` — `≤ₘ`, `≡ₘ`. ✅
+* [x] **P1** Re-package existing iffs as `ManyOneReduction` instances:
+  * `mpcp_iff_pcp` → `Reductions.mpcpToPcp : MPCP α ≤ₘ PCP (Ext α)`. ✅
+  * `halts_codeOf_iff` → `Reductions.haltTM_to_haltTMCode`. ✅
+  * **Pending — alphabet uniformity issue**:
+    * `halt_le_mpcp` — destination alphabet `Alpha tm.State Symbol`
+      depends on input, so no single fixed `Problem` node fits. Needs
+      either a uniform `List Bool`-encoded MPCP variant, or a notion
+      of "indexed problem family" in the framework.
+    * `halts_iff_pcp` — same blocker (it's `halt_le_mpcp` composed
+      with `mpcpToPcp`).
+    * `hasSolution_iff_intersectionNonempty` — destination CFGs over
+      alphabet `α ⊕ Tile α`. Same flavour of issue.
 * [ ] **P1** Finish Rice's theorem expressed in the new framework:
   * `Halt/Rice/Theorem.lean` — `SemHalt (riceConstTM c) = univ ↔ Halts
     c.toTM (encodeTMCode c)` (four-phase bisimulation, ~400–600 LoC).
@@ -39,6 +42,11 @@ is to define the framework now.
     `P` distinguishing `univ` from `∅` Sem.
   * Concrete corollaries: "halts on `[]`", "halts on some input",
     "halts on every input", "halts on no input".
+* [ ] **P1** Address the alphabet-uniformity issue. Two options:
+  * (a) Define `EncodedPCP` and `EncodedCFGIntersection` over a fixed
+    alphabet (`List Bool`) by encoding inputs.
+  * (b) Extend the framework with `IndexedProblem` (problem families
+    parameterised by an index, with reductions between families).
 
 ---
 

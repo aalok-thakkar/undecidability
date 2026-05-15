@@ -49,8 +49,12 @@ framework lands.
 
 | Phase 1 deliverable | Status |
 |---|---|
-| `Problem`, `ManyOneReduction`, `TuringReduction` | 🚧 not yet |
-| Composition laws + transfer theorems | 🚧 not yet |
+| `Problem`, `ManyOneReduction` | ✅ in [`Reduction/Basic.lean`](Reduction/Basic.lean) |
+| Composition laws (`.id`, `.trans`, identity / assoc) | ✅ in [`Reduction/Composition.lean`](Reduction/Composition.lean) |
+| Transfer theorems (`Decidable.of_manyOne`, contrapositive) | ✅ in [`Reduction/Transfer.lean`](Reduction/Transfer.lean) |
+| Notation `≤ₘ`, `≡ₘ` | ✅ in [`Reduction/Notation.lean`](Reduction/Notation.lean) |
+| `TuringReduction` (oracle-machine notion) | 🚧 not yet |
+| TM-computable reduction layer | 🚧 not yet |
 | `@[reduction_graph]` attribute | 🚧 not yet |
 | Proof-search tactic | 🚧 not yet |
 
@@ -105,14 +109,18 @@ Halt/                  ← halting-problem undecidability
     TrivialTMs.lean    -- tm_alwaysHalt + tm_loop
     Extender.lean      -- riceConstTM construction
 
-PCP.lean / CFG.lean / Halt.lean  -- library roots
+Reduction/             ← Phase 1 framework (DiagonaLean abstractions)
+  Basic.lean           -- Problem, ManyOneReduction, Decidable, Undecidable
+  Composition.lean     -- .id, .trans, identity / associativity
+  Transfer.lean        -- Decidable.of_manyOne, Undecidable.of_manyOne
+  Notation.lean        -- ≤ₘ, ≡ₘ
+  Instances.lean       -- ManyOneReduction wrappers around existing iffs
+
+PCP.lean / CFG.lean / Halt.lean / Reduction.lean  -- library roots
 Main.lean                         -- executable entry point
 TODO.md                           -- prioritised work plan
 ROADMAP.md                        -- proof-chain architecture
 ```
-
-`Reduction/` (Phase 1 framework) will be added alongside these once
-the abstraction layer lands.
 
 ## Conventions
 

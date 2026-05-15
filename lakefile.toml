@@ -1,6 +1,9 @@
 name = "DiagonaLean"
 version = "0.1.0"
-defaultTargets = ["PCP", "CFG", "Halt", "pcp"]
+defaultTargets = ["Reduction", "PCP", "CFG", "Halt", "pcp"]
+
+[[lean_lib]]
+name = "Reduction"
 
 [[lean_lib]]
 name = "PCP"
