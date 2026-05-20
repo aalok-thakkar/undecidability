@@ -119,7 +119,8 @@ theorem tmDecides_canonicalSelfHaltPred_isSelfHaltDecider
 
 theorem canonicalSelfHaltPred_TMUndecidable :
     TMUndecidable canonicalSelfHaltPred := by
-  intro ⟨D, hD⟩
+  intro h_dec
+  obtain ⟨D, hD⟩ := h_dec.exists_TMDecides
   exact Halt.halt_undecidable
     ⟨D, tmDecides_canonicalSelfHaltPred_isSelfHaltDecider hD⟩
 

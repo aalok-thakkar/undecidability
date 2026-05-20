@@ -194,14 +194,20 @@ into two categories:
 * `semHalt_riceConstTM_dichotomy` — the four-phase Rice extender
   bisimulation.
 
-**TM-composition machinery** (would all be discharged by a single
-cslib-level TM-composition primitive):
+**Per-edge `TMComputable` witnesses** (6 currently): each asserts a
+specific concrete reduction function is TM-computable. True, but
+requires building the explicit TM for that function.
 
-* `TMComputable.comp` — `TMComputable f → TMComputable g →
-  TMComputable (g ∘ f)`.
-* `TMComputable.id` — the identity is TM-computable.
-* `TMUndecidable.of_TMReduction` — transfer theorem for TM-undecidability.
-* Per-edge `<edgeName>_TMComputable` witnesses (6 currently).
+The **TM-composition machinery** was previously postulated; it is now
+**proved**. `TMComputable f` is defined as `Nonempty (TimeComputable f)`
+on cslib's `SingleTapeTM.TimeComputable`. cslib ships `TimeComputable.id`
+and `TimeComputable.comp` (the latter needing a monotone time bound,
+supplied by `monotoniseTC`), so:
+
+* `TMComputable.id` — proved from `TimeComputable.id`.
+* `TMComputable.comp` — proved from `TimeComputable.comp` + `monotoniseTC`.
+* `TMUndecidable.of_TMReduction` — proved: `boolIndicator (pred₂ ∘ f) =
+  boolIndicator pred₁`, then `TMComputable.comp`.
 
 ## Build invariant
 

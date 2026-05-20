@@ -77,7 +77,8 @@ theorem tmDecides_selfHaltPred_isSelfHaltDecider
 consequence of `Halt.halt_undecidable` via
 `tmDecides_selfHaltPred_isSelfHaltDecider`. -/
 theorem selfHaltPred_TMUndecidable : TMUndecidable selfHaltPred := by
-  intro ⟨D, hD⟩
+  intro h_dec
+  obtain ⟨D, hD⟩ := h_dec.exists_TMDecides
   exact Halt.halt_undecidable ⟨D, tmDecides_selfHaltPred_isSelfHaltDecider hD⟩
 
 /-! ## Hook into `Problem`: `EncodedSelfHalt` as a framework node -/

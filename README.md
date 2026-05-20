@@ -79,7 +79,8 @@ CanonicalSelfHalt → HaltsOnEverything   (Rice extender)
 | `@[reduction_graph]` attribute + env extension | ✅ [`Reduction/Graph.lean`](Reduction/Graph.lean) |
 | Backward DFS search with cycle detection | ✅ [`Reduction/Search.lean`](Reduction/Search.lean) |
 | `by reduce_diag` tactic (term emission) | ✅ [`Reduction/Tactic.lean`](Reduction/Tactic.lean) |
-| TM-level `TMDecides`/`TMUndecidable`/`TMComputable` | ✅ [`Reduction/TMDecidable.lean`](Reduction/TMDecidable.lean) |
+| TM-level `TMDecidable`/`TMUndecidable`/`TMComputable` (on cslib `TimeComputable`) | ✅ [`Reduction/TMDecidable.lean`](Reduction/TMDecidable.lean) |
+| `TMComputable.id`/`.comp`, `TMUndecidable.of_TMReduction` (proved, not postulated) | ✅ [`Reduction/TMDecidable.lean`](Reduction/TMDecidable.lean) |
 | TM-mode dispatch + `@[tm_undecidable_anchor]` | ✅ in `Graph.lean` + `Tactic.lean` |
 | `TuringReduction` (oracle-machine notion) | 🚧 not yet (Phase 3 prerequisite) |
 
@@ -112,11 +113,16 @@ postulates are stratified by content:
 |---|---|---|
 | `normalisingWrapper` | **HUM construction**: 2-bit alphabet shift with sentinel marker + synthetic blank | [`Halt/Normalise.lean`](Halt/Normalise.lean) |
 | `semHalt_riceConstTM_dichotomy` | **Rice extender bisimulation**: four-phase erase/write/move-back/simulate | [`Halt/Rice/Theorem.lean`](Halt/Rice/Theorem.lean) |
-| `TMComputable.comp`, `.id`, `TMUndecidable.of_TMReduction` | **TM-composition machinery**: cslib doesn't yet expose a TM-composition primitive | [`Reduction/TMDecidable.lean`](Reduction/TMDecidable.lean) |
 | Per-edge `<edgeName>_TMComputable` (6 total) | **"This Lean function is TM-computable"** for each reduction's `f` | scattered |
 
-Discharging these is the main work of completing the project. See
-[`TODO.md`](TODO.md) for the prioritised plan.
+The **TM-composition machinery** is no longer postulated. `TMComputable`
+is now defined as `Nonempty (TimeComputable f)` on top of cslib's
+`SingleTapeTM.TimeComputable`, so `TMComputable.id`, `TMComputable.comp`,
+and `TMUndecidable.of_TMReduction` are **proved theorems** (see
+[`Reduction/TMDecidable.lean`](Reduction/TMDecidable.lean)).
+
+Discharging the remaining postulates is the main work of completing the
+project. See [`TODO.md`](TODO.md) for the prioritised plan.
 
 ## Repository layout
 

@@ -40,28 +40,31 @@ from the framework.
   Four-phase bisimulation of the Rice extender (erase / write /
   move-back / simulate). ~1000 LoC.
 
-### TM-composition machinery (one cslib primitive unlocks all)
+### TM-composition machinery — ✅ DISCHARGED
 
-The cleanest path here is to build a generic TM-composition primitive
-(either in cslib upstream or locally) and use it to discharge all of
-the postulates below at once.
+`TMComputable` is now `Nonempty (TimeComputable f)` over cslib's
+`SingleTapeTM.TimeComputable`. cslib ships `TimeComputable.id` and
+`TimeComputable.comp`, so:
 
-* [ ] **P0** Generic TM composition `compose (D : SingleTapeTM Bool)
-  (D' : SingleTapeTM Bool) : SingleTapeTM Bool` with `Outputs D w v →
-  Outputs D' v u → Outputs (compose D D') w u`. Cslib doesn't yet
-  expose this. ~500 LoC including the state-interleaving and
-  transition-relation bookkeeping.
-* [ ] **P1** Discharge `TMComputable.comp` in [`Reduction/TMDecidable.lean`](Reduction/TMDecidable.lean)
-  using the generic compose.
-* [ ] **P1** Discharge `TMComputable.id` (a trivial 1-state TM).
-* [ ] **P1** Discharge `TMUndecidable.of_TMReduction` (compose decider with
-  reducer; standard contrapositive argument).
-* [ ] **P2** Discharge per-edge `<edgeName>_TMComputable` witnesses (6 currently:
-  `encodedSelfHalt_to_encodedHalt`, `encodedHalt_to_encodedHaltMPCP`,
-  `encodedHaltMPCP_to_encodedMPCP_LB`, `encodedMPCP_LB_to_encodedPCP_LB`,
-  `encodedPCP_LB_to_encodedCFGI_LB`,
-  `canonicalSelfHalt_to_haltsOnEverything`). Each requires building
-  the TM for a specific Lean function — straightforward but tedious.
+* [x] **P1** `TMComputable.id` — proved from `TimeComputable.id`. ✅
+* [x] **P1** `TMComputable.comp` — proved from `TimeComputable.comp`
+  (cslib's `comp` needs a monotone time bound; `monotoniseTC` upgrades
+  any `TimeComputable` to one whose bound is the running supremum). ✅
+* [x] **P1** `TMUndecidable.of_TMReduction` — proved:
+  `boolIndicator pred₁ = boolIndicator pred₂ ∘ f` (from the reduction
+  iff), then `TMComputable.comp`. ✅
+
+### Per-edge `TMComputable` witnesses (remaining TM-bookkeeping)
+
+* [ ] **P2** Discharge per-edge `<edgeName>_TMComputable` witnesses (6
+  currently: `encodedSelfHalt_to_encodedHalt`,
+  `encodedHalt_to_encodedHaltMPCP`, `encodedHaltMPCP_to_encodedMPCP_LB`,
+  `encodedMPCP_LB_to_encodedPCP_LB`, `encodedPCP_LB_to_encodedCFGI_LB`,
+  `canonicalSelfHalt_to_haltsOnEverything`). Each is now honestly typed
+  as `Nonempty (TimeComputable f)` — requires building the explicit TM
+  for a specific Lean function. Tedious but mechanical; the cslib
+  `idComputer`/`compComputer` primitives plus per-operation TMs
+  (bit-copy, length-prefix, etc.) suffice.
 
 ---
 
