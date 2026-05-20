@@ -113,7 +113,18 @@ postulates are stratified by content:
 |---|---|---|
 | `normalisingWrapper` | **HUM construction**: 2-bit alphabet shift with sentinel marker + synthetic blank | [`Halt/Normalise.lean`](Halt/Normalise.lean) |
 | `semHalt_riceConstTM_dichotomy` | **Rice extender bisimulation**: four-phase erase/write/move-back/simulate | [`Halt/Rice/Theorem.lean`](Halt/Rice/Theorem.lean) |
-| Per-edge `<edgeName>_TMComputable` (6 total) | **"This Lean function is TM-computable"** for each reduction's `f` | scattered |
+| Per-edge `<edgeName>_TMComputable` (5 total) | **"This Lean function is TM-computable"** for each reduction's `f` — every such `f` is now genuinely computable (see design note below) | scattered |
+
+> **Soundness note.** An earlier `EncodedHaltMPCP` baked `NoBlankWrites ∧
+> NoLeftBoundary` into its predicate, which forced the reduction to
+> *branch on the undecidable `NoLeftBoundary`* — making the reducing
+> function non-computable and its `TMComputable` witness a *false*
+> axiom. This is fixed: `EncodedHaltMPCP.predicate` is now the bare
+> `MHasSolution` of the HMU instance, the HMU side conditions are
+> discharged on the `EncodedHalt ≤ₘ EncodedHaltMPCP` edge via the
+> normalising wrapper's proof fields, and **no reduction branches on
+> anything undecidable**. The `encodedPCP_LB_to_encodedCFGI_LB`
+> identity edge's witness is now a proved theorem (`TMComputable.id`).
 
 The **TM-composition machinery** is no longer postulated. `TMComputable`
 is now defined as `Nonempty (TimeComputable f)` on top of cslib's

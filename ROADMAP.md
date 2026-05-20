@@ -194,9 +194,12 @@ into two categories:
 * `semHalt_riceConstTM_dichotomy` — the four-phase Rice extender
   bisimulation.
 
-**Per-edge `TMComputable` witnesses** (6 currently): each asserts a
-specific concrete reduction function is TM-computable. True, but
-requires building the explicit TM for that function.
+**Per-edge `TMComputable` witnesses** (5 currently; the
+`encodedPCP_LB_to_encodedCFGI_LB` identity edge is proved via
+`TMComputable.id`): each asserts a specific concrete reduction function
+is TM-computable. True (every reduction function is genuinely
+computable — no branch on an undecidable predicate, see the soundness
+note in `README.md`), but requires building the explicit TM.
 
 The **TM-composition machinery** was previously postulated; it is now
 **proved**. `TMComputable f` is defined as `Nonempty (TimeComputable f)`

@@ -169,10 +169,12 @@ def encodedPCP_LB_to_encodedCFGI_LB :
       obtain ⟨P, _⟩ := pair
       exact hasSolution_iff_intersectionNonempty P
 
-/-- Postulate: TM-computability of the identity. (Subsumed by
-`TMComputable.id` but kept under the naming convention for the
-tactic's witness discovery.) -/
-axiom encodedPCP_LB_to_encodedCFGI_LB_TMComputable :
-    TMComputable encodedPCP_LB_to_encodedCFGI_LB.f
+/-- TM-computability of the identity reduction — **proved**, not
+postulated, since `encodedPCP_LB_to_encodedCFGI_LB.f` is `id`. Named
+under the `<edge>_TMComputable` convention for the tactic's witness
+lookup. -/
+theorem encodedPCP_LB_to_encodedCFGI_LB_TMComputable :
+    TMComputable encodedPCP_LB_to_encodedCFGI_LB.f :=
+  TMComputable.id
 
 end DiagonaLean.Reductions

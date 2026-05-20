@@ -25,9 +25,16 @@ The reduction is then `bits ↦ encodePair (encodeTMCode c') w'` after
 decoding. Malformed inputs route to `[]`, which fails both predicates
 (empty bits don't decode).
 
-The single substantive postulate this depends on — `normalisingWrapper`
-in `Halt/Normalise.lean` — captures the standard textbook
-sentinel-shift / blank-replacement construction.
+Because `EncodedHaltMPCP.predicate` is the bare `MHasSolution` of the
+HMU instance (it does *not* re-assert `NoBlankWrites`/`NoLeftBoundary`),
+this edge is exactly where the side conditions are discharged: the spec
+proof feeds `normalisingWrapper.no_blank_writes` / `no_left_boundary`
+into `halt_le_mpcp` as proof terms. No reduction branches on the
+undecidable `NoLeftBoundary`.
+
+The substantive postulate this depends on — `normalisingWrapper` in
+`Halt/Normalise.lean` — captures the standard textbook sentinel-shift /
+blank-replacement construction.
 -/
 
 namespace DiagonaLean.Reductions
@@ -50,8 +57,10 @@ noncomputable def encodedHalt_to_encodedHaltMPCP_f (bits : List Bool) : List Boo
 /-! ## The reduction -/
 
 /-- `EncodedHalt ≤ₘ EncodedHaltMPCP` via the HUM-normalising wrapper.
-The wrapper provides NBW + NLB by construction; the iff is
-`Halts c.toTM w ↔ Halts c'.toTM w' ↔ NBW c' ∧ NLB c' w' ∧ Halts c' w'`. -/
+On a decoded `(c, w)`, the wrapped `(c', w')` satisfies the HMU side
+conditions, so `halt_le_mpcp` gives
+`Halts c'.toTM w' ↔ MHasSolution (startTile c'.toTM w') (haltTiles c'.toTM)`;
+the wrapper's `halts_iff` bridges `Halts c.toTM w ↔ Halts c'.toTM w'`. -/
 @[reduction_graph]
 noncomputable def encodedHalt_to_encodedHaltMPCP :
     ManyOneReduction EncodedHalt EncodedHaltMPCP where
@@ -72,7 +81,8 @@ noncomputable def encodedHalt_to_encodedHaltMPCP :
           match Halt.Encoding.decodeTMCode codeBits with
           | none => False
           | some c =>
-            NoBlankWrites c.toTM ∧ NoLeftBoundary c.toTM w ∧ PCP.Halts c.toTM w)
+            MHasSolution (PCP.HaltToMPCP.startTile c.toTM w)
+                         (PCP.HaltToMPCP.haltTiles c.toTM))
       have : Halt.Pair.decodePair ([] : List Bool) = none := rfl
       rw [this]
       exact id
@@ -95,21 +105,23 @@ noncomputable def encodedHalt_to_encodedHaltMPCP :
               match Halt.Encoding.decodeTMCode codeBits with
               | none => False
               | some c' =>
-                NoBlankWrites c'.toTM ∧ NoLeftBoundary c'.toTM w_in ∧
-                  PCP.Halts c'.toTM w_in)
+                MHasSolution (PCP.HaltToMPCP.startTile c'.toTM w_in)
+                             (PCP.HaltToMPCP.haltTiles c'.toTM))
         rw [Halt.Pair.decodePair_encodePair]
         change PCP.Halts c.toTM w ↔
           (match Halt.Encoding.decodeTMCode (Halt.Encoding.encodeTMCode cw'.1) with
             | none => False
             | some c' =>
-              NoBlankWrites c'.toTM ∧ NoLeftBoundary c'.toTM cw'.2 ∧
-                PCP.Halts c'.toTM cw'.2)
+              MHasSolution (PCP.HaltToMPCP.startTile c'.toTM cw'.2)
+                           (PCP.HaltToMPCP.haltTiles c'.toTM))
         rw [Halt.Encoding.decodeTMCode_encodeTMCode]
-        refine ⟨fun h => ?_, fun ⟨_, _, h⟩ => ?_⟩
-        · refine ⟨normalisingWrapper.no_blank_writes c w,
-                  normalisingWrapper.no_left_boundary c w, ?_⟩
-          exact (normalisingWrapper.halts_iff c w).mpr h
-        · exact (normalisingWrapper.halts_iff c w).mp h
+        show PCP.Halts c.toTM w ↔
+          MHasSolution (PCP.HaltToMPCP.startTile cw'.1.toTM cw'.2)
+                       (PCP.HaltToMPCP.haltTiles cw'.1.toTM)
+        rw [← PCP.HaltToMPCP.halt_le_mpcp cw'.1.toTM
+              (normalisingWrapper.no_blank_writes c w) cw'.2
+              (normalisingWrapper.no_left_boundary c w)]
+        exact (normalisingWrapper.halts_iff c w).symm
 
 /-- Postulate: the reduction function is TM-computable.
 `encodedHalt_to_encodedHaltMPCP_f` decodes a bit-string, runs the

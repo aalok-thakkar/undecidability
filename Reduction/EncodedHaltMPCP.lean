@@ -169,13 +169,19 @@ namespace DiagonaLean.Problems
 open PCP PCP.HaltToMPCP
 
 /-- The "MPCP-reducible halt" problem: input is bits encoding a pair
-`(codeBits, w)` such that `codeBits` decodes to a `TMCode c` whose
-realised TM `c.toTM` satisfies `NoBlankWrites` and `NoLeftBoundary` on
-`w`, and halts on `w`.
+`(codeBits, w)`; the predicate is *directly* `MHasSolution` of the
+HMU-derived MPCP instance `(startTile c.toTM w, haltTiles c.toTM)`.
 
-The normalisation conditions are part of the predicate so that
-`halt_le_mpcp` applies directly. The downstream edge `EncodedHalt ≤ₘ
-EncodedHaltMPCP` (TM normalisation) remains to be wired in (TODO). -/
+**Design note.** An earlier version baked `NoBlankWrites ∧
+NoLeftBoundary` into the predicate. That forced the reduction
+`EncodedHaltMPCP ≤ₘ MPCP_LB` to *branch* on `NoLeftBoundary` — an
+undecidable predicate — making the reducing function non-computable
+and its `TMComputable` witness unsound. The fix is here: the predicate
+is the MPCP question itself, so the reduction never branches on
+anything undecidable. The HMU side conditions are discharged on the
+*upstream* edge `EncodedHalt ≤ₘ EncodedHaltMPCP`, where the normalising
+wrapper supplies `NoBlankWrites`/`NoLeftBoundary` as proof terms (not
+runtime checks). -/
 def EncodedHaltMPCP : Problem where
   Input := List Bool
   predicate := fun bits =>
@@ -185,19 +191,20 @@ def EncodedHaltMPCP : Problem where
       match Halt.Encoding.decodeTMCode codeBits with
       | none => False
       | some c =>
-        NoBlankWrites c.toTM ∧ NoLeftBoundary c.toTM w ∧ PCP.Halts c.toTM w
+        MHasSolution (PCP.HaltToMPCP.startTile c.toTM w)
+                     (PCP.HaltToMPCP.haltTiles c.toTM)
 
 end DiagonaLean.Problems
 
 namespace DiagonaLean.Reductions
 
 open DiagonaLean DiagonaLean.Problems PCP PCP.HaltToMPCP
-open scoped Classical
 
-/-- The reducing function. Decodes the bits to `(c, w)`; if `c.toTM` is
-normalised, returns the `(startTile, haltTiles)` pair under
-`mapTile`/`mapStack` of `encodeAlpha`. Otherwise returns the
-`noSolutionSentinel`. -/
+/-- The reducing function. Decodes the bits to `(c, w)` and returns the
+HMU `(startTile, haltTiles)` pair under `mapTile`/`mapStack` of
+`encodeAlpha`. Malformed inputs (which fail to decode — a *decidable*
+test) route to `noSolutionSentinel`. No branch on an undecidable
+predicate, so the function is genuinely computable. -/
 noncomputable def encodedHaltMPCP_to_mpcpLB_f
     (bits : List Bool) : Tile (List Bool) × Stack (List Bool) :=
   match Halt.Pair.decodePair bits with
@@ -206,18 +213,15 @@ noncomputable def encodedHaltMPCP_to_mpcpLB_f
     match Halt.Encoding.decodeTMCode codeBits with
     | none => DiagonaLean.noSolutionSentinel
     | some c =>
-      if _h_norm : NoBlankWrites c.toTM ∧ NoLeftBoundary c.toTM w then
-        (StackMap.mapTile (@DiagonaLean.encodeAlpha c.numStates)
-          (PCP.HaltToMPCP.startTile c.toTM w),
-         StackMap.mapStack (@DiagonaLean.encodeAlpha c.numStates)
-          (PCP.HaltToMPCP.haltTiles c.toTM))
-      else
-        DiagonaLean.noSolutionSentinel
+      (StackMap.mapTile (@DiagonaLean.encodeAlpha c.numStates)
+        (PCP.HaltToMPCP.startTile c.toTM w),
+       StackMap.mapStack (@DiagonaLean.encodeAlpha c.numStates)
+        (PCP.HaltToMPCP.haltTiles c.toTM))
 
-/-- `EncodedHaltMPCP ≤ₘ MPCP_LB`: the canonical edge, composing
-`halt_le_mpcp` with `StackMap.mhasSolution_mapStack_iff` at
-`σ = encodeAlpha`. Malformed or non-normalised inputs route to
-`noSolutionSentinel`, whose `MHasSolution` is `False`. -/
+/-- `EncodedHaltMPCP ≤ₘ MPCP_LB`: collapse the simulation alphabet
+`Alpha (Fin (n+1)) Bool` to `List Bool` via `encodeAlpha`. The
+predicate equivalence is `StackMap.mhasSolution_mapStack_iff`; malformed
+inputs are `False` on both sides via `noSolutionSentinel`. -/
 @[reduction_graph]
 noncomputable def encodedHaltMPCP_to_mpcpLB :
     ManyOneReduction EncodedHaltMPCP MPCP_LB where
@@ -229,8 +233,8 @@ noncomputable def encodedHaltMPCP_to_mpcpLB :
         match Halt.Encoding.decodeTMCode codeBits with
         | none => False
         | some c =>
-          NoBlankWrites c.toTM ∧ NoLeftBoundary c.toTM w ∧
-            PCP.Halts c.toTM w) ↔
+          MHasSolution (PCP.HaltToMPCP.startTile c.toTM w)
+                       (PCP.HaltToMPCP.haltTiles c.toTM)) ↔
       MHasSolution (encodedHaltMPCP_to_mpcpLB_f bits).1
                    (encodedHaltMPCP_to_mpcpLB_f bits).2
     unfold encodedHaltMPCP_to_mpcpLB_f
@@ -244,17 +248,8 @@ noncomputable def encodedHaltMPCP_to_mpcpLB :
         refine ⟨False.elim, fun h => ?_⟩
         exact (DiagonaLean.not_mhasSolution_noSolutionSentinel h).elim
       case h_2 c h_code => -- decodeTMCode = some c
-        by_cases h_norm : NoBlankWrites c.toTM ∧ NoLeftBoundary c.toTM w
-        · rw [dif_pos h_norm,
-            StackMap.mhasSolution_mapStack_iff
-              (DiagonaLean.encodeAlpha_injective)]
-          refine ⟨fun ⟨_, _, h_halts⟩ => ?_, fun h_mhas => ?_⟩
-          · exact (halt_le_mpcp c.toTM h_norm.1 w h_norm.2).mp h_halts
-          · exact ⟨h_norm.1, h_norm.2,
-              (halt_le_mpcp c.toTM h_norm.1 w h_norm.2).mpr h_mhas⟩
-        · rw [dif_neg h_norm]
-          refine ⟨fun ⟨h_nbw, h_nlb, _⟩ => ?_, fun h => ?_⟩
-          · exact (h_norm ⟨h_nbw, h_nlb⟩).elim
-          · exact (DiagonaLean.not_mhasSolution_noSolutionSentinel h).elim
+        exact (StackMap.mhasSolution_mapStack_iff DiagonaLean.encodeAlpha_injective
+          (PCP.HaltToMPCP.startTile c.toTM w)
+          (PCP.HaltToMPCP.haltTiles c.toTM)).symm
 
 end DiagonaLean.Reductions

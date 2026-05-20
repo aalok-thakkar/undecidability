@@ -56,15 +56,30 @@ from the framework.
 
 ### Per-edge `TMComputable` witnesses (remaining TM-bookkeeping)
 
-* [ ] **P2** Discharge per-edge `<edgeName>_TMComputable` witnesses (6
-  currently: `encodedSelfHalt_to_encodedHalt`,
+* [x] **P2** `encodedPCP_LB_to_encodedCFGI_LB_TMComputable` — proved
+  (`= TMComputable.id`, the edge's `f` is `id`). ✅
+* [ ] **P2** Discharge the remaining 5 per-edge `<edgeName>_TMComputable`
+  witnesses (`encodedSelfHalt_to_encodedHalt`,
   `encodedHalt_to_encodedHaltMPCP`, `encodedHaltMPCP_to_encodedMPCP_LB`,
-  `encodedMPCP_LB_to_encodedPCP_LB`, `encodedPCP_LB_to_encodedCFGI_LB`,
+  `encodedMPCP_LB_to_encodedPCP_LB`,
   `canonicalSelfHalt_to_haltsOnEverything`). Each is now honestly typed
-  as `Nonempty (TimeComputable f)` — requires building the explicit TM
-  for a specific Lean function. Tedious but mechanical; the cslib
+  as `Nonempty (TimeComputable f)` for a *genuinely computable* `f`
+  (see soundness fix below) — requires building the explicit TM for a
+  specific Lean function. Tedious but mechanical; the cslib
   `idComputer`/`compComputer` primitives plus per-operation TMs
   (bit-copy, length-prefix, etc.) suffice.
+
+### Soundness fix (landed)
+
+* [x] **P0** `EncodedHaltMPCP` no longer bakes `NoBlankWrites ∧
+  NoLeftBoundary` into its predicate. The old design forced
+  `encodedHaltMPCP_to_mpcpLB.f` to branch on the *undecidable*
+  `NoLeftBoundary`, making the function non-computable and its
+  `TMComputable` witness a false axiom. Fixed: the predicate is now the
+  bare `MHasSolution` of the HMU instance; the side conditions are
+  discharged on the `EncodedHalt ≤ₘ EncodedHaltMPCP` edge from the
+  normalising wrapper's proof fields. No reduction branches on anything
+  undecidable. ✅
 
 ---
 
