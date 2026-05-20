@@ -38,7 +38,17 @@ from the framework.
   analogy with `PCP/Reductions/HaltToMPCP.lean`.
 * [ ] **P1** `semHalt_riceConstTM_dichotomy` in [`Halt/Rice/Theorem.lean`](Halt/Rice/Theorem.lean).
   Four-phase bisimulation of the Rice extender (erase / write /
-  move-back / simulate). ~1000 LoC.
+  move-back / simulate). Being built incrementally in
+  [`Halt/Rice/Bisim.lean`](Halt/Rice/Bisim.lean) as standalone phase
+  lemmas:
+  * [x] **Phase 1 (erase)** — `erase_phase`: `⟨erase, mk₁ w⟩ →*
+    ⟨writeBit 0, ∅⟩` for every `w`. Key fact: `StackTape` trims
+    trailing blanks, so the blanked cell vanishes and the post-erase
+    config is input-independent. ✅
+  * [ ] Phase 2 (write) — write `encodeTMCode c` bit-by-bit.
+  * [ ] Phase 3 (move-back) — return head to the start.
+  * [ ] Phase 4 (simulate) — bisimulate `c.toTM`.
+  * [ ] Compose into `semHalt_riceConstTM_dichotomy`.
 
 ### TM-composition machinery — ✅ DISCHARGED
 
