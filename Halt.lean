@@ -15,6 +15,7 @@ public import Halt.Helpers
 public import Halt.CodeOf
 public import Halt.Undecidable
 public import Halt.Wrapper.Alphabet
+public import Halt.Wrapper.Tape
 public import Halt.Rice.Basic
 public import Halt.Rice.TrivialTMs
 public import Halt.Rice.Extender
