@@ -8,6 +8,7 @@ module
 public import Halt.Rice.Basic
 public import Halt.Rice.TrivialTMs
 public import Halt.Rice.Extender
+public import Halt.Rice.Bisim
 public import Halt.CodeOf
 public import Reduction.TMDecidable
 public import Reduction.HaltUndecidable
@@ -54,21 +55,16 @@ namespace Halt.Rice
 
 open Turing PCP DiagonaLean DiagonaLean.Problems
 
-/-! ## The behaviour postulate -/
+/-! ## The behaviour theorem
 
-/-- **The Rice extender behaviour postulate**: `riceConstTM c` has
-halt-set `univ` if `c.toTM` halts on `encodeTMCode c`, and halt-set `∅`
-otherwise. Formal four-phase bisimulation proof is future work; the
-construction in `Halt.Rice.Extender` is sound. -/
-axiom semHalt_riceConstTM_dichotomy (c : Halt.TMCode) :
-    (PCP.Halts c.toTM (Halt.Encoding.encodeTMCode c) →
-      SemHalt (riceConstTM c) = Set.univ) ∧
-    (¬ PCP.Halts c.toTM (Halt.Encoding.encodeTMCode c) →
-      SemHalt (riceConstTM c) = ∅)
+`semHalt_riceConstTM_dichotomy` — formerly postulated — is now **proved**
+in `Halt.Rice.Bisim` by the four-phase bisimulation (erase / write /
+move-back / simulate). It is re-exported here for the rest of the Rice
+development. -/
 
 /-! ## `codeOf` corollary -/
 
-/-- The behaviour postulate transferred through `codeOf`: a TMCode wrapper. -/
+/-- The behaviour theorem transferred through `codeOf`: a TMCode wrapper. -/
 lemma semHalt_codeOf_riceConstTM_dichotomy (c : Halt.TMCode) :
     (PCP.Halts c.toTM (Halt.Encoding.encodeTMCode c) →
       SemHalt (codeOf (riceConstTM c)).toTM = Set.univ) ∧

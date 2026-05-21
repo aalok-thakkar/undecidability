@@ -112,8 +112,12 @@ postulates are stratified by content:
 | Postulate | Type | Location |
 |---|---|---|
 | `normalisingWrapper` | **HUM construction**: 2-bit alphabet shift with sentinel marker + synthetic blank | [`Halt/Normalise.lean`](Halt/Normalise.lean) |
-| `semHalt_riceConstTM_dichotomy` | **Rice extender bisimulation**: four-phase erase/write/move-back/simulate | [`Halt/Rice/Theorem.lean`](Halt/Rice/Theorem.lean) |
 | Per-edge `<edgeName>_TMComputable` (5 total) | **"This Lean function is TM-computable"** for each reduction's `f` — every such `f` is now genuinely computable (see design note below) | scattered |
+
+The **Rice extender bisimulation** `semHalt_riceConstTM_dichotomy` is no
+longer postulated — it is **proved** in
+[`Halt/Rice/Bisim.lean`](Halt/Rice/Bisim.lean) by the four-phase
+bisimulation (erase / write / move-back / simulate).
 
 > **Soundness note.** An earlier `EncodedHaltMPCP` baked `NoBlankWrites ∧
 > NoLeftBoundary` into its predicate, which forced the reduction to

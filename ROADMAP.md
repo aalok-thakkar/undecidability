@@ -187,12 +187,13 @@ DiagonaLean is **complete as a framework**, but several TM-level
 constructions are postulated rather than fully formalised. They fall
 into two categories:
 
-**Substantive mathematical content** (each ~1000+ LoC to formalise):
+**Substantive mathematical content**:
 
 * `normalisingWrapper` — the HUM-normalising TM wrapper (2-bit
-  alphabet shift). Standard textbook construction.
-* `semHalt_riceConstTM_dichotomy` — the four-phase Rice extender
-  bisimulation.
+  alphabet shift). Standard textbook construction; ~1000+ LoC.
+* ~~`semHalt_riceConstTM_dichotomy`~~ — **proved** in
+  `Halt/Rice/Bisim.lean` by the four-phase bisimulation (erase / write
+  / move-back / simulate). No longer a postulate.
 
 **Per-edge `TMComputable` witnesses** (5 currently; the
 `encodedPCP_LB_to_encodedCFGI_LB` identity edge is proved via

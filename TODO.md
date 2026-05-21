@@ -36,19 +36,19 @@ from the framework.
   c'.toTM w'`, and `Halts c.toTM w ↔ Halts c'.toTM w'`. Standard textbook
   construction (sentinel marker + synthetic blank). ~1000-1500 LoC by
   analogy with `PCP/Reductions/HaltToMPCP.lean`.
-* [ ] **P1** `semHalt_riceConstTM_dichotomy` in [`Halt/Rice/Theorem.lean`](Halt/Rice/Theorem.lean).
-  Four-phase bisimulation of the Rice extender (erase / write /
-  move-back / simulate). Being built incrementally in
-  [`Halt/Rice/Bisim.lean`](Halt/Rice/Bisim.lean) as standalone phase
-  lemmas:
-  * [x] **Phase 1 (erase)** — `erase_phase`: `⟨erase, mk₁ w⟩ →*
-    ⟨writeBit 0, ∅⟩` for every `w`. Key fact: `StackTape` trims
-    trailing blanks, so the blanked cell vanishes and the post-erase
-    config is input-independent. ✅
-  * [ ] Phase 2 (write) — write `encodeTMCode c` bit-by-bit.
-  * [ ] Phase 3 (move-back) — return head to the start.
-  * [ ] Phase 4 (simulate) — bisimulate `c.toTM`.
-  * [ ] Compose into `semHalt_riceConstTM_dichotomy`.
+* [x] **P1** `semHalt_riceConstTM_dichotomy` — **PROVED** in
+  [`Halt/Rice/Bisim.lean`](Halt/Rice/Bisim.lean) by the four-phase
+  bisimulation of the Rice extender; the axiom in
+  `Halt/Rice/Theorem.lean` is removed. ✅
+  * [x] Phase 1 (erase) — `erase_phase`: `⟨erase, mk₁ w⟩ →*
+    ⟨writeBit 0, ∅⟩` for every `w` (`StackTape` blank-trimming makes
+    the post-erase config input-independent).
+  * [x] Phase 2 (write) — `write_phase`: lay `encodeTMCode c` bit-by-bit.
+  * [x] Phase 3 (move-back) — `moveBack_phase`: return head to the
+    start via the two-list `splitTape` invariant.
+  * [x] Phase 4 (simulate) — `liftCfg` bisimulation between the `inC`
+    states and `c.toTM`, plus a functional-relation confluence lemma
+    to factor the halt-trace through the setup phases.
 
 ### TM-composition machinery — ✅ DISCHARGED
 

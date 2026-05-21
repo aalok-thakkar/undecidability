@@ -305,4 +305,156 @@ theorem moveBack_phase :
   exact moveBack_phase_aux c (encodedLen c) (Halt.Encoding.encodeTMCode c) []
     rfl (List.append_nil _) (Nat.lt_succ_self _)
 
+/-! ## Phases 1–3 composed -/
+
+/-- The composite of the erase, write, and move-back phases: from the
+initial configuration `⟨erase, mk₁ w⟩`, `riceConstTM c` reaches
+`⟨inC c.q₀, mk₁ (encodeTMCode c)⟩` for *every* input `w`. -/
+theorem setup_phase (w : List Bool) :
+    ReflTransGen (riceConstTM c).TransitionRelation
+      ⟨some RiceState.erase, BiTape.mk₁ w⟩
+      ⟨some (RiceState.inC c.q₀), BiTape.mk₁ (Halt.Encoding.encodeTMCode c)⟩ :=
+  (erase_phase c w).trans ((write_phase c).trans (moveBack_phase c))
+
+/-! ## Phase 4: simulate
+
+In states `inC q`, `riceConstTM c` runs `c.tr` verbatim (just tagging
+the next state with `inC`). So `liftCfg` — tagging a `c.toTM`
+configuration's state with `inC` — is a step-for-step bisimulation
+between `c.toTM` and the `inC`-fragment of `riceConstTM c`. -/
+
+/-- Lift a `c.toTM` configuration into `riceConstTM c` by tagging the
+state with `inC`. -/
+def liftCfg (cfg : c.toTM.Cfg) : (riceConstTM c).Cfg :=
+  ⟨cfg.state.map RiceState.inC, cfg.BiTape⟩
+
+/-- One step commutes with `liftCfg`: the `inC` states of
+`riceConstTM c` bisimulate `c.toTM`. -/
+lemma step_liftCfg (cfg : c.toTM.Cfg) :
+    (riceConstTM c).step (liftCfg c cfg) =
+      (c.toTM.step cfg).map (liftCfg c) := by
+  obtain ⟨st, t⟩ := cfg
+  cases st with
+  | none => rfl
+  | some q' =>
+    show (riceConstTM c).step ⟨some (RiceState.inC q'), t⟩ =
+      (c.toTM.step ⟨some q', t⟩).map (liftCfg c)
+    rcases hcr : c.tr q' t.head with ⟨stmt, next⟩
+    simp only [SingleTapeTM.step, riceConstTM_tr, riceTr, Halt.TMCode.toTM_tr,
+               hcr, liftCfg, Option.map_some]
+    rfl
+
+/-- Reachability lifts from `c.toTM` to the `inC`-fragment of
+`riceConstTM c`. -/
+lemma reach_to_rice {cfg cfg' : c.toTM.Cfg}
+    (h : ReflTransGen c.toTM.TransitionRelation cfg cfg') :
+    ReflTransGen (riceConstTM c).TransitionRelation
+      (liftCfg c cfg) (liftCfg c cfg') := by
+  refine ReflTransGen.lift (liftCfg c) ?_ h
+  intro a b hab
+  show (riceConstTM c).step (liftCfg c a) = some (liftCfg c b)
+  rw [step_liftCfg, show c.toTM.step a = some b from hab]
+  rfl
+
+/-- Reachability descends: any `riceConstTM c` configuration reachable
+from a lifted config is itself lifted, and the underlying `c.toTM`
+config is reachable. -/
+lemma reach_from_rice {cfg : c.toTM.Cfg} {d : (riceConstTM c).Cfg}
+    (h : ReflTransGen (riceConstTM c).TransitionRelation (liftCfg c cfg) d) :
+    ∃ cfg', d = liftCfg c cfg' ∧
+      ReflTransGen c.toTM.TransitionRelation cfg cfg' := by
+  induction h with
+  | refl => exact ⟨cfg, rfl, ReflTransGen.refl⟩
+  | tail _ h_step ih =>
+    obtain ⟨cfg', h_eq, h_reach⟩ := ih
+    subst h_eq
+    rw [show (riceConstTM c).TransitionRelation = fun a b =>
+          (riceConstTM c).step a = some b from rfl] at h_step
+    rw [step_liftCfg] at h_step
+    obtain ⟨cfg'', h_cfg'', h_d⟩ := Option.map_eq_some_iff.mp h_step
+    exact ⟨cfg'', h_d.symm, h_reach.tail h_cfg''⟩
+
+/-! ## Determinism / confluence -/
+
+/-- `riceConstTM`'s transition relation is functional (deterministic). -/
+lemma step_deterministic (x y z : (riceConstTM c).Cfg)
+    (h₁ : (riceConstTM c).TransitionRelation x y)
+    (h₂ : (riceConstTM c).TransitionRelation x z) : y = z := by
+  rw [show (riceConstTM c).TransitionRelation = fun a b =>
+        (riceConstTM c).step a = some b from rfl] at h₁ h₂
+  rw [h₁] at h₂
+  exact Option.some.inj h₂
+
+/-- For a functional relation, any two configurations reachable from a
+common source are comparable. -/
+lemma reflTransGen_total {α : Type} {r : α → α → Prop}
+    (hfun : ∀ x y z, r x y → r x z → y = z) {a b d : α}
+    (hab : ReflTransGen r a b) :
+    ReflTransGen r a d → ReflTransGen r b d ∨ ReflTransGen r d b := by
+  induction hab with
+  | refl => exact fun h => Or.inl h
+  | tail _ hstep ih =>
+    intro had
+    rcases ih had with h | h
+    · rcases h.cases_head with h_eq | ⟨m, hm, hmd⟩
+      · exact Or.inr (h_eq ▸ ReflTransGen.single hstep)
+      · exact Or.inl ((hfun _ _ _ hm hstep) ▸ hmd)
+    · exact Or.inr (h.tail hstep)
+
+/-! ## The dichotomy -/
+
+/-- `riceConstTM c` halts on `w` iff `c.toTM` halts on `encodeTMCode c`
+— *independent of `w`*. -/
+theorem halts_riceConstTM_iff (w : List Bool) :
+    PCP.Halts (riceConstTM c) w ↔
+      PCP.Halts c.toTM (Halt.Encoding.encodeTMCode c) := by
+  have h_initR : SingleTapeTM.initCfg (riceConstTM c) w =
+      (⟨some RiceState.erase, BiTape.mk₁ w⟩ : (riceConstTM c).Cfg) := rfl
+  have h_initC : liftCfg c (SingleTapeTM.initCfg c.toTM
+      (Halt.Encoding.encodeTMCode c)) =
+      (⟨some (RiceState.inC c.q₀),
+        BiTape.mk₁ (Halt.Encoding.encodeTMCode c)⟩ : (riceConstTM c).Cfg) := rfl
+  constructor
+  · rintro ⟨tape, h_chain⟩
+    rw [h_initR] at h_chain
+    rcases reflTransGen_total (step_deterministic c) (setup_phase c w) h_chain
+      with h | h
+    · obtain ⟨cfg', h_eq, h_reach⟩ := reach_from_rice c (h_initC ▸ h)
+      have h_cfg' : cfg' = (⟨none, tape⟩ : c.toTM.Cfg) := by
+        obtain ⟨st, t⟩ := cfg'
+        simp only [liftCfg] at h_eq
+        obtain ⟨h_st, h_t⟩ := SingleTapeTM.Cfg.mk.injEq .. |>.mp h_eq
+        cases st with
+        | none => rw [h_t]
+        | some q => exact absurd h_st (by simp)
+      exact ⟨tape, h_cfg' ▸ h_reach⟩
+    · exfalso
+      rcases h.cases_head with h_eq | ⟨m, hm, _⟩
+      · exact absurd h_eq (by simp)
+      · exact absurd hm (by
+          simp [SingleTapeTM.TransitionRelation, SingleTapeTM.step])
+  · intro h_halts
+    obtain ⟨tape, h_chain⟩ := h_halts
+    refine ⟨tape, ?_⟩
+    rw [h_initR]
+    refine (setup_phase c w).trans ?_
+    have h := reach_to_rice c h_chain
+    rw [h_initC] at h
+    exact h
+
+/-- **The Rice extender behaviour dichotomy** — formerly the postulate
+`semHalt_riceConstTM_dichotomy` in `Halt.Rice.Theorem`. -/
+theorem semHalt_riceConstTM_dichotomy :
+    (PCP.Halts c.toTM (Halt.Encoding.encodeTMCode c) →
+      SemHalt (riceConstTM c) = Set.univ) ∧
+    (¬ PCP.Halts c.toTM (Halt.Encoding.encodeTMCode c) →
+      SemHalt (riceConstTM c) = ∅) := by
+  refine ⟨fun h_halts => ?_, fun h_not => ?_⟩
+  · ext w
+    simp only [SemHalt, Set.mem_setOf_eq, Set.mem_univ, iff_true]
+    exact (halts_riceConstTM_iff c w).mpr h_halts
+  · ext w
+    simp only [SemHalt, Set.mem_setOf_eq, Set.mem_empty_iff_false, iff_false]
+    exact fun h => h_not ((halts_riceConstTM_iff c w).mp h)
+
 end Halt.Rice
