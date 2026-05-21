@@ -30,11 +30,17 @@ Six axioms remain (see [`README.md`](README.md) for the ledger).
 ### Substantive
 
 * [ ] **P1** `normalisingWrapper` ([`Halt/Normalise.lean`](Halt/Normalise.lean)).
-  Build the HUM-normalising wrapper TM in Lean: a 2-bit alphabet
-  encoding with reserved bit-pairs for a left-edge marker and a
-  synthetic blank, plus the prefix-write states; prove it satisfies
-  `NoBlankWrites` / `NoLeftBoundary` and preserves halting. ~1000–1500
-  LoC, by analogy with `PCP/Reductions/HaltToMPCP.lean`.
+  Build the HUM-normalising wrapper TM in Lean. Being built
+  incrementally in [`Halt/Wrapper/`](Halt/Wrapper/) — realistically
+  ~2000 LoC, the project's largest single construction:
+  * [x] Step 1 — `Wrapper/Alphabet`: the 2-bit `Code` (synthetic blank
+    + left-edge marker), `encSym`/`decSym`, round-trip.
+  * [x] Step 2 — `Wrapper/Tape`: `encodeInput`, the wrapped input.
+  * [ ] Step 3 — the simulator TM (2-bit-encoding step simulator).
+  * [ ] Step 4 — tape folding for one-sidedness (`NoLeftBoundary`).
+  * [ ] Step 5 — `NoBlankWrites` proof.
+  * [ ] Step 6 — the `halts_iff` bisimulation.
+  * [ ] Step 7 — assemble `normalisingWrapper`, remove the axiom.
 
 ### Mechanical — per-edge `TMComputable` witnesses
 
