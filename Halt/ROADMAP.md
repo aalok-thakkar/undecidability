@@ -27,6 +27,8 @@ emitting `[true]` / `[false]` on its output tape.
 | `Halt.Helpers`   | Worked example: `invertTM`, a 2-state TM that halts on `[false]` and loops on `[true]`. (Not on the proof-chain critical path.) |
 | `Halt.CodeOf`    | Generic `codeOf : SingleTapeTM Bool → TMCode` with the bisim theorem `halts_codeOf_iff`. |
 | `Halt.Undecidable` | Inlined diagonal TM `diagTM D` and the final `halt_undecidable`. |
+| `Halt.Normalise` | Postulated HUM-normalising wrapper `normalisingWrapper` (used by `Reduction.EncodedHaltNormalised`). |
+| `Halt.Rice.*`    | Rice's theorem — see the dedicated section below. |
 
 ## Proof outline
 
@@ -98,9 +100,10 @@ For comparison, a textbook universal-TM construction (which would
 generalise to pair-form `HALT_TM` directly) is typically estimated at
 2000–4000 LoC.
 
-## Rice's theorem — in progress
+## Rice's theorem
 
-Files under [`Rice/`](Rice/):
+Files under [`Rice/`](Rice/) — restricted Rice (properties that
+distinguish `Set.univ` from `∅`) is **complete**.
 
 * `Rice.Basic` ✅ — definitions: `SemHalt`, `BehaviourEquiv`,
   `IsSemantic`, `IsPropDecider`, `NonTrivial`, and the semantic-set
@@ -109,29 +112,32 @@ Files under [`Rice/`](Rice/):
   every input) and `tm_loop` (loops on every input), with
   `SemHalt = univ` and `SemHalt = ∅` respectively.
 * `Rice.Extender` ✅ — the *constant-Sem* reduction TM
-  `riceConstTM : TMCode → SingleTapeTM Bool`. The construction is
-  four-phase: erase the input, write `encodeTMCode c` past the erased
-  region, move the head back to the start of the written code, then
-  simulate `c.toTM`. After the move-back phase, the layout is
-  isomorphic (via position offset) to `initCfg c.toTM (encodeTMCode c)`,
-  so the simulation phase is behaviourally identical to running
-  `c.toTM` on `encodeTMCode c`.
+  `riceConstTM : TMCode → SingleTapeTM Bool`. Four phases: erase the
+  input, write `encodeTMCode c`, move the head back to its start, then
+  simulate `c.toTM`.
+* `Rice.Bisim` ✅ — the four-phase **bisimulation**, proving
 
-  *Construction is complete; the behaviour theorem*
+      semHalt_riceConstTM_dichotomy :
+        (Halts c.toTM (encodeTMCode c) → SemHalt (riceConstTM c) = univ) ∧
+        (¬ Halts … → SemHalt (riceConstTM c) = ∅)
 
-      `SemHalt (riceConstTM c) = univ ↔ Halts c.toTM (encodeTMCode c)`
+  Each phase is a standalone lemma — `erase_phase`, `write_phase`,
+  `moveBack_phase`, and the simulate phase (`step_liftCfg`,
+  `reach_to_rice` / `reach_from_rice`, plus a functional-relation
+  confluence lemma `reflTransGen_total`). The erase phase exploits
+  `StackTape` blank-trimming so the post-erase configuration is
+  input-independent; the move-back phase uses a two-list `splitTape`
+  invariant; the simulate phase shows the `inC` states bisimulate
+  `c.toTM` step-for-step. Formerly the postulate
+  `semHalt_riceConstTM_dichotomy`; now fully proved.
+* `Rice.Theorem` ✅ — `CanonicalSelfHalt` (TM-undecidable from
+  `halt_undecidable`), `HaltsOnEverything` as a `List Bool` `Problem`,
+  and the reduction `canonicalSelfHalt_to_haltsOnEverything`. Restricted
+  Rice is thereby an instance of `by reduce_diag`.
 
-  *requires a four-phase bisimulation argument and is the next chunk.*
-
-* `Rice.Theorem` 🚧 — once the behaviour theorem is established,
-  *Restricted Rice* (Rice for properties that distinguish
-  `tm_alwaysHalt` from `tm_loop`) follows by reducing K-decidability
-  to `IsPropDecider`-decidability via `riceConstTM`. Concrete
-  corollaries: "halts on `[]`", "halts on at least one input",
-  "halts on all inputs", "halts on no inputs", etc. — all undecidable.
-  Full Rice (arbitrary semantic witnesses) needs an
-  *input-preserving* extender (a more elaborate construction with
-  scratch space).
+Full Rice (arbitrary non-trivial semantic properties) needs an
+*input-preserving* extender — a more elaborate construction with
+scratch space — and is tracked in the top-level [`TODO.md`](../TODO.md).
 
 ## Other deferred items
 

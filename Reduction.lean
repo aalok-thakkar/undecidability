@@ -28,111 +28,65 @@ public import Reduction.EncodedLB
 @[expose] public section
 
 /-!
-# Reduction — DiagonaLean Phase 1 framework
+# Reduction — the DiagonaLean library root
 
-This library defines the abstract reduction framework:
+This library is the DiagonaLean framework: a compositional toolkit for
+many-one reductions, a registered *reduction graph*, and the
+`by reduce_diag` proof-search tactic. See [`README.md`](../README.md)
+for the project overview and [`ROADMAP.md`](../ROADMAP.md) for the
+architecture.
 
-* `DiagonaLean.Problem`           — a decision problem (Input + predicate).
-* `DiagonaLean.ManyOneReduction`  — a function-level many-one reduction.
-* `DiagonaLean.Decidable`         — abstract decidability.
-* `DiagonaLean.Undecidable`       — its negation.
-* Composition laws: `.id`, `.trans`, identity/assoc lemmas.
-* Transfer theorems: `Decidable.of_manyOne`, `Undecidable.of_manyOne`.
-* Notation: `P ≤ₘ Q`, `P ≡ₘ Q`.
+## Core framework
 
-The framework is Lean-function-level: `ManyOneReduction.f` is an
-arbitrary `Lean → Lean` function, with no computability constraint. A
-TM-level refinement (`TMComputableReduction`) is on the TODO; see
-[`TODO.md`](../TODO.md).
+* `Reduction.Basic`       — `Problem`, `ManyOneReduction`, classical
+                            `Decidable` / `Undecidable`.
+* `Reduction.Composition` — `.id`, `.trans`, identity / associativity.
+* `Reduction.Transfer`    — `Decidable.of_manyOne`, `Undecidable.of_manyOne`.
+* `Reduction.Notation`    — `P ≤ₘ Q`, `P ≡ₘ Q`.
 
-For instances wrapping the existing reductions (`mpcp_iff_pcp`,
-`halt_le_mpcp`, `halts_iff_pcp`, `hasSolution_iff_intersectionNonempty`,
-`halts_codeOf_iff`), see `Reduction.Instances`.
+`ManyOneReduction.f` is an arbitrary Lean function; computability
+constraints live at the TM layer below.
 
-## Encoded graph (`List Bool`-input variants)
+## TM-level (un)decidability
 
-To give the reduction graph stable `Type`-level node identities, the
-`Reduction.Encoded*` modules wrap problems at fixed alphabets:
+* `Reduction.TMDecidable` — `TMComputable`, `TMDecidable`,
+                            `TMUndecidable` on `List Bool → Prop`,
+                            defined over cslib's
+                            `SingleTapeTM.TimeComputable`. The
+                            composition machinery — `TMComputable.id`,
+                            `TMComputable.comp`,
+                            `TMUndecidable.of_TMReduction` — is
+                            **proved**, not postulated.
+* `Reduction.HaltUndecidable` — bridges `Halt.halt_undecidable` to
+                            `TMUndecidable selfHaltPred` (no postulate),
+                            and registers `EncodedSelfHalt ≤ₘ
+                            EncodedHalt`.
 
-* `Reduction.Encoded`        — `EncodedHalt` (`HaltTMCode ≡ₘ EncodedHalt`).
-* `Reduction.StackMap`       — generic per-symbol injection lifting.
-* `Reduction.EncodedPCP`     — `MPCP_LB`, `EncodedPCP`, and the
-                                `mpcpLB_to_encodedPCP` edge via `flattenExt`.
-* `Reduction.EncodedHaltMPCP` — `EncodedHaltMPCP` and the
-                                `encodedHaltMPCP_to_mpcpLB` edge via `encodeAlpha`.
-* `Reduction.EncodedCFG`     — `EncodedCFGIntersection` and the
-                                `encodedPCP_to_encodedCFGIntersection` edge.
+## The reduction graph (`List Bool`-input nodes)
 
-The chain
-`EncodedHaltMPCP ≤ₘ MPCP_LB ≤ₘ EncodedPCP ≤ₘ EncodedCFGIntersection`
-runs end-to-end. The missing edge `EncodedHalt ≤ₘ EncodedHaltMPCP`
-(TM normalisation to `NoBlankWrites ∧ NoLeftBoundary`) is the remaining
-gap to a fully end-to-end undecidability transfer from `HaltTM`.
+The `Reduction.Encoded*` / `StackMap` / `StackEncoding` modules give
+every problem a `List Bool`-flavoured `Problem` node and wire the
+13 graph edges. The spine runs end-to-end:
 
-## Tactic infrastructure
+  `EncodedSelfHalt → EncodedHalt → EncodedHaltMPCP → EncodedMPCP_LB`
+  `  → EncodedPCP_LB → EncodedCFGI_LB`
 
-* `Reduction.Graph`          — `Edge` record, persistent env extension,
-                                `@[reduction_graph]` attribute, plus
-                                anchors (`@[undecidable_anchor]`).
-                                Component 1.
-* `Reduction.Search`         — depth-bounded backward DFS from a target
-                                `Problem` to an anchor, with cycle
-                                detection and metavariable
-                                instantiation for polymorphic edges.
-                                Component 2.
-* `Reduction.Tactic`         — `composeReductions` (fold a `Path` via
-                                `ManyOneReduction.trans`) and the
-                                `by reduce_diag` tactic that closes
-                                `Undecidable T` goals end-to-end via
-                                `Undecidable.of_manyOne`. Component 3.
-                                (The tactic is named `reduce_diag` to
-                                avoid a name clash with Mathlib's
-                                `reduce` tactic.)
+The `EncodedHalt → EncodedHaltMPCP` edge applies the HUM normalising
+wrapper (`Reduction.EncodedHaltNormalised`).
 
-The full MVP tactic chain is operational: tag reductions with
-`@[reduction_graph]`, an anchor with `@[undecidable_anchor]`, and write
-`example : Undecidable T := by reduce_diag`.
+## The tactic
 
-Known limitation: only ground edges are supported by `composeReductions`
-(polymorphic edges throw); the search itself handles polymorphic
-endpoints. Threading metavariables from search through term emission is
-future work.
+* `Reduction.Graph`  — `@[reduction_graph]` registers edges;
+                       `@[undecidable_anchor]` /
+                       `@[tm_undecidable_anchor]` mark anchors.
+* `Reduction.Search` — depth-bounded backward DFS to an anchor.
+* `Reduction.Tactic` — `by reduce_diag` composes the path and applies
+                       the transfer theorem, dispatching on whether the
+                       goal is `Undecidable P` or
+                       `TMUndecidable P.predicate`.
 
-## TM-level undecidability
+`Reduction.Smoke` `#eval`s the graph and exercises `by reduce_diag`.
 
-The framework's `Undecidable` is classically vacuous (`¬ ∃ Lean-function-decider`).
-For a genuinely meaningful claim:
-
-* `Reduction.TMDecidable`     — `TMDecides`, `TMDecidable`,
-                                 `TMUndecidable`, `TMComputable` on
-                                 `List Bool → Prop`. Transfer theorem
-                                 `TMUndecidable.of_TMReduction` and
-                                 composition `TMComputable.comp` are
-                                 **axiomatised** (standard TM
-                                 constructions, awaiting cslib primitives).
-* `Reduction.HaltUndecidable` — bridges `Halt.halt_undecidable` (the
-                                 cslib `IsSelfHaltDecider` refutation) to
-                                 `TMUndecidable selfHaltPred` (no
-                                 postulate). The duplication reduction
-                                 `EncodedSelfHalt ≤ₘ EncodedHalt` is
-                                 registered with `@[reduction_graph]`,
-                                 the anchor with `@[tm_undecidable_anchor]`,
-                                 and a postulated `TMComputable`
-                                 witness named per the convention
-                                 `<reductionName>_TMComputable`.
-
-The `by reduce_diag` tactic dispatches on the goal:
-
-* `Undecidable P` (or `Decidable P → False`) — uses
-  `@[undecidable_anchor]` and composes via `ManyOneReduction.trans` +
-  `Undecidable.of_manyOne`.
-* `TMUndecidable (Problem.predicate P)` — uses
-  `@[tm_undecidable_anchor]`, looks up each edge's
-  `<edgeName>_TMComputable` witness, and composes via
-  `ManyOneReduction.trans` + `TMComputable.comp` +
-  `TMUndecidable.of_TMReduction`.
-
-This makes the framework non-vacuous: a real anchor at the TM level
-plus a (axiomatised) transfer mechanism that the tactic uses
-automatically.
+Known limitation: `composeReductions` handles only ground edges
+(polymorphic edges throw); see [`TODO.md`](../TODO.md).
 -/

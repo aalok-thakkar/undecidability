@@ -1,217 +1,209 @@
 # DiagonaLean
 
-**A Compositional Lean 4 Framework for Turing Reductions, Diagonalisation, and Undecidability Proofs.**
+**A compositional Lean 4 framework for Turing reductions, diagonalisation, and undecidability proofs.**
 
-DiagonaLean is a foundational research project to develop the first
-fully compositional, tactic-driven toolkit for mechanising
-computability-theoretic reasoning in Lean 4. It delivers a reusable
-library of certified Turing and many-one reductions, diagonalisation
-arguments, and undecidability transfer theorems, together with a
-proof-search tactic `by reduce_diag` that traverses a registered
-reduction graph.
+DiagonaLean is a research project building a reusable, tactic-driven
+toolkit for mechanising computability theory in Lean 4. It provides a
+framework of certified many-one reductions, a registered *reduction
+graph*, and a proof-search tactic `by reduce_diag` that closes
+undecidability goals by composing reductions back to a known anchor.
 
-For a prioritised work plan, see [`TODO.md`](TODO.md).
-For implementation details of the proofs landed so far, see
-[`ROADMAP.md`](ROADMAP.md).
+The development is built on [`cslib`](https://github.com/leanprover/cslib)'s
+`Turing.SingleTapeTM` and Mathlib's `ContextFreeGrammar`.
+
+* Forward-looking work plan — [`TODO.md`](TODO.md)
+* Proof-chain architecture — [`ROADMAP.md`](ROADMAP.md)
+* Halting-problem construction notes — [`Halt/ROADMAP.md`](Halt/ROADMAP.md)
+
+---
 
 ## Headline result
 
 ```lean
+-- The anchor: no Turing machine decides the self-halt problem
+-- (proved from cslib's `Halt.halt_undecidable`, no postulate).
 @[tm_undecidable_anchor]
 theorem CanonicalSelfHalt_TMUndecidable :
     TMUndecidable CanonicalSelfHalt.predicate := …
 
-example : TMUndecidable HaltsOnEverything.predicate := by reduce_diag
-example : TMUndecidable EncodedCFGI_LB.predicate    := by reduce_diag
+-- Downstream undecidability, closed automatically by the tactic:
+example : TMUndecidable HaltsOnEverything.predicate    := by reduce_diag
+example : TMUndecidable EncodedCFGI_LB.predicate       := by reduce_diag
 ```
 
-The tactic searches the registered graph for a chain of reductions
-from the anchor (a real theorem derived from cslib's `halt_undecidable`)
-to the goal, composes them, and applies the TM-level undecidability
-transfer. Every example in [`Reduction/Smoke.lean`](Reduction/Smoke.lean)
-closes this way.
+`by reduce_diag` reads the goal, searches the registered reduction
+graph for a path from a known-undecidable anchor to the goal problem,
+composes the reductions, and applies the undecidability-transfer
+theorem. Every example in [`Reduction/Smoke.lean`](Reduction/Smoke.lean)
+(13 of them) is closed this way.
 
-## Phased work plan
+---
 
-* **Phase 1 — Core Framework**. Formal definitions of `Problem`,
-  `ManyOneReduction`, `Decidable`, `Undecidable`. Composition laws,
-  classical and TM-level undecidability-transfer theorems, public
-  notation layer, `@[reduction_graph]` attribute, `by reduce_diag`
-  proof-search tactic.
-* **Phase 2 — Canonical Base Problems**. Self-contained
-  undecidability proofs for the Halting Problem and the PCP / CFG /
-  Rice chain, all wired into the reduction graph as `List Bool`-input
-  encoded variants.
-* **Phase 3 — Standard Reduction Library**. Mechanisation of the
-  undecidability results in Hopcroft–Motwani–Ullman, plus selected
-  results from Rogers and Soare. The target is a comprehensive,
-  textbook-aligned reduction graph in which every node is a certified
-  formal object and every edge is a machine-checked reduction.
+## The reduction graph
 
-## Current state
-
-**Phases 1 and 2 are functionally landed.** The reduction graph has
-13 registered edges; the smoke test closes 13 examples via
-`by reduce_diag` (4 classical `Undecidable` + 9 TM-level
-`TMUndecidable`). The full TM-undecidability chain is grounded at
-`halt_undecidable` with no problem-specific postulates:
+The graph has **13 registered edges**. Its spine — the chain that
+carries TM-undecidability from the halting problem to context-free
+grammar intersection — is:
 
 ```
-selfHaltPred_TMUndecidable           (real, from halt_undecidable)
-  → EncodedSelfHalt                  (encoded predicate)
-  → EncodedHalt                      (duplication reduction)
-  → EncodedHaltMPCP                  (HUM normalising wrapper)
-  → EncodedMPCP_LB                   (List Bool encoding)
-  → EncodedPCP_LB                    (MPCP→PCP via flattenStack)
-  → EncodedCFGI_LB                   (PCP→CFG-intersection identity)
-
-CanonicalSelfHalt → HaltsOnEverything   (Rice extender)
+   Halt.halt_undecidable                    (cslib: no TM decides self-halt)
+            │
+            ▼
+   selfHaltPred / CanonicalSelfHalt         TMUndecidable — PROVED, no postulate
+            │
+            ├─────────────────────────────────────────────┐
+            ▼                                             ▼
+   EncodedSelfHalt                            HaltsOnEverything   (Rice's theorem)
+            │  encodedSelfHalt_to_encodedHalt
+            ▼
+   EncodedHalt
+            │  encodedHalt_to_encodedHaltMPCP        (HUM normalising wrapper)
+            ▼
+   EncodedHaltMPCP
+            │  encodedHaltMPCP_to_encodedMPCP_LB
+            ▼
+   EncodedMPCP_LB
+            │  encodedMPCP_LB_to_encodedPCP_LB       (MPCP → PCP, flattenStack)
+            ▼
+   EncodedPCP_LB
+            │  encodedPCP_LB_to_encodedCFGI_LB       (PCP → CFG-intersection)
+            ▼
+   EncodedCFGI_LB
 ```
 
-### Phase 1 — Framework
+Every node is a `Problem` with `Input = List Bool`; every edge is a
+machine-checked `ManyOneReduction` tagged `@[reduction_graph]`.
 
-| Deliverable | Status |
+---
+
+## Project status
+
+DiagonaLean is organised in three phases. **Phases 1 and 2 are
+complete.**
+
+### Phase 1 — Core framework ✅
+
+| Component | Status |
 |---|---|
 | `Problem`, `ManyOneReduction`, classical `Decidable`/`Undecidable` | ✅ [`Reduction/Basic.lean`](Reduction/Basic.lean) |
-| Composition laws (`.id`, `.trans`, identity / assoc) | ✅ [`Reduction/Composition.lean`](Reduction/Composition.lean) |
-| Transfer theorems (`Decidable.of_manyOne`, contrapositive) | ✅ [`Reduction/Transfer.lean`](Reduction/Transfer.lean) |
+| Composition laws `.id`, `.trans`, identity / associativity | ✅ [`Reduction/Composition.lean`](Reduction/Composition.lean) |
+| Transfer theorems `Decidable.of_manyOne`, `Undecidable.of_manyOne` | ✅ [`Reduction/Transfer.lean`](Reduction/Transfer.lean) |
 | Notation `≤ₘ`, `≡ₘ` | ✅ [`Reduction/Notation.lean`](Reduction/Notation.lean) |
-| `@[reduction_graph]` attribute + env extension | ✅ [`Reduction/Graph.lean`](Reduction/Graph.lean) |
-| Backward DFS search with cycle detection | ✅ [`Reduction/Search.lean`](Reduction/Search.lean) |
+| `@[reduction_graph]` attribute + persistent env extension | ✅ [`Reduction/Graph.lean`](Reduction/Graph.lean) |
+| Anchors `@[undecidable_anchor]`, `@[tm_undecidable_anchor]` | ✅ [`Reduction/Graph.lean`](Reduction/Graph.lean) |
+| Backward-DFS path search | ✅ [`Reduction/Search.lean`](Reduction/Search.lean) |
 | `by reduce_diag` tactic (term emission) | ✅ [`Reduction/Tactic.lean`](Reduction/Tactic.lean) |
-| TM-level `TMDecidable`/`TMUndecidable`/`TMComputable` (on cslib `TimeComputable`) | ✅ [`Reduction/TMDecidable.lean`](Reduction/TMDecidable.lean) |
-| `TMComputable.id`/`.comp`, `TMUndecidable.of_TMReduction` (proved, not postulated) | ✅ [`Reduction/TMDecidable.lean`](Reduction/TMDecidable.lean) |
-| TM-mode dispatch + `@[tm_undecidable_anchor]` | ✅ in `Graph.lean` + `Tactic.lean` |
-| `TuringReduction` (oracle-machine notion) | 🚧 not yet (Phase 3 prerequisite) |
+| TM-level `TMDecidable` / `TMUndecidable` / `TMComputable` | ✅ [`Reduction/TMDecidable.lean`](Reduction/TMDecidable.lean) |
+| `TMComputable.id`/`.comp`, `TMUndecidable.of_TMReduction` — *proved* | ✅ [`Reduction/TMDecidable.lean`](Reduction/TMDecidable.lean) |
 
-### Phase 2 — Canonical problems
+### Phase 2 — Canonical problems ✅
 
-| Deliverable | Status |
+| Result | Status |
 |---|---|
-| Halting problem (`halt_undecidable` for cslib `SingleTapeTM Bool`) | ✅ [`Halt/Undecidable.lean`](Halt/Undecidable.lean) |
-| `Halt ≤_m MPCP ≤_m PCP` (`halts_iff_pcp` under HUM side conditions) | ✅ [`PCP/Reductions/HaltToMPCP.lean`](PCP/Reductions/HaltToMPCP.lean), [`PCP/Reductions/HaltToPCP.lean`](PCP/Reductions/HaltToPCP.lean) |
-| `PCP ≤_m CFG-Intersection-Nonempty` | ✅ [`CFG/PcpReduction.lean`](CFG/PcpReduction.lean) |
-| `List Bool`-input encoded variants of all problems | ✅ `Reduction/Encoded*.lean` |
-| TM-level bridge `halt_undecidable → TMUndecidable selfHaltPred` | ✅ [`Reduction/HaltUndecidable.lean`](Reduction/HaltUndecidable.lean) |
-| HUM normalisation reduction `EncodedHalt → EncodedHaltMPCP` | ✅ [`Reduction/EncodedHaltNormalised.lean`](Reduction/EncodedHaltNormalised.lean) (with postulated `normalisingWrapper`) |
-| Rice's theorem (restricted form, `HaltsOnEverything`) | ✅ [`Halt/Rice/Theorem.lean`](Halt/Rice/Theorem.lean) (with postulated bisimulation) |
-| TM acceptance (ATM) | 🚧 not yet |
-| CFG universality / equivalence / ambiguity | 🚧 not yet |
-| Rice's theorem (general non-trivial semantic) | 🚧 not yet (only restricted form for now) |
+| `Halt.halt_undecidable` (no TM decides self-halt) | ✅ [`Halt/Undecidable.lean`](Halt/Undecidable.lean) |
+| `Halt ≤ MPCP ≤ PCP` (HUM construction) | ✅ [`PCP/Reductions/`](PCP/Reductions/) |
+| `PCP ≤ CFG-intersection-nonempty` | ✅ [`CFG/PcpReduction.lean`](CFG/PcpReduction.lean) |
+| `List Bool`-input encoded variants of every problem | ✅ [`Reduction/Encoded*.lean`](Reduction/) |
+| Bridge `halt_undecidable → TMUndecidable selfHaltPred` | ✅ [`Reduction/HaltUndecidable.lean`](Reduction/HaltUndecidable.lean) |
+| HUM normalisation `EncodedHalt → EncodedHaltMPCP` | ✅ [`Reduction/EncodedHaltNormalised.lean`](Reduction/EncodedHaltNormalised.lean) |
+| Rice's theorem (restricted), incl. the 4-phase extender bisimulation | ✅ [`Halt/Rice/`](Halt/Rice/) |
 
-The proof contains **no `sorry`** anywhere and is verified against
-`leanprover/lean4:v4.29.0-rc4`. `lake build` is clean.
+### Phase 3 — Standard reduction library 🚧
 
-## Postulates
+Textbook results from Hopcroft–Motwani–Ullman, Rogers, and Soare —
+CFG universality/equivalence/ambiguity, ATM, LBA, Wang tilings, the
+recursion theorem, etc. See [`TODO.md`](TODO.md).
 
-DiagonaLean follows the discipline of clearly cataloguing which
-statements are postulated (because formal Lean proof is currently
-prohibitively expensive in cslib's TM model) versus proved. The
-postulates are stratified by content:
+The development is verified against `leanprover/lean4:v4.29.0-rc4` and
+contains **no `sorry`**.
 
-| Postulate | Type | Location |
+---
+
+## Soundness and postulates
+
+DiagonaLean keeps an honest, explicit ledger of what is *proved*
+versus *postulated*. After the framework refactors, **6 axioms**
+remain — all of them genuine, uncontroversial statements:
+
+| Axiom | Kind | Location |
 |---|---|---|
-| `normalisingWrapper` | **HUM construction**: 2-bit alphabet shift with sentinel marker + synthetic blank | [`Halt/Normalise.lean`](Halt/Normalise.lean) |
-| Per-edge `<edgeName>_TMComputable` (5 total) | **"This Lean function is TM-computable"** for each reduction's `f` — every such `f` is now genuinely computable (see design note below) | scattered |
+| `normalisingWrapper` | **HUM construction** — a wrapper TM (2-bit alphabet shift with a sentinel marker + synthetic blank) satisfying `NoBlankWrites`/`NoLeftBoundary`. Substantive; the wrapper TM is not yet built. | [`Halt/Normalise.lean`](Halt/Normalise.lean) |
+| 5 × `<edge>_TMComputable` | **Church–Turing instances** — each asserts one concrete reduction function (`encodePair`, decoders, `riceConstTM`, …) has a Turing machine. All genuinely computable. | scattered |
 
-The **Rice extender bisimulation** `semHalt_riceConstTM_dichotomy` is no
-longer postulated — it is **proved** in
-[`Halt/Rice/Bisim.lean`](Halt/Rice/Bisim.lean) by the four-phase
-bisimulation (erase / write / move-back / simulate).
+Two earlier substantive postulates have since been **discharged**:
 
-> **Soundness note.** An earlier `EncodedHaltMPCP` baked `NoBlankWrites ∧
-> NoLeftBoundary` into its predicate, which forced the reduction to
-> *branch on the undecidable `NoLeftBoundary`* — making the reducing
-> function non-computable and its `TMComputable` witness a *false*
-> axiom. This is fixed: `EncodedHaltMPCP.predicate` is now the bare
-> `MHasSolution` of the HMU instance, the HMU side conditions are
-> discharged on the `EncodedHalt ≤ₘ EncodedHaltMPCP` edge via the
-> normalising wrapper's proof fields, and **no reduction branches on
-> anything undecidable**. The `encodedPCP_LB_to_encodedCFGI_LB`
-> identity edge's witness is now a proved theorem (`TMComputable.id`).
+* The **TM-composition machinery** (`TMComputable.id`/`.comp`,
+  `TMUndecidable.of_TMReduction`) is now *proved* — `TMComputable` is
+  defined as `Nonempty (TimeComputable f)` over cslib's
+  `SingleTapeTM.TimeComputable`, which already ships `.id`/`.comp`.
+* The **Rice extender bisimulation** `semHalt_riceConstTM_dichotomy`
+  is now *proved* in [`Halt/Rice/Bisim.lean`](Halt/Rice/Bisim.lean) by
+  the full four-phase bisimulation.
 
-The **TM-composition machinery** is no longer postulated. `TMComputable`
-is now defined as `Nonempty (TimeComputable f)` on top of cslib's
-`SingleTapeTM.TimeComputable`, so `TMComputable.id`, `TMComputable.comp`,
-and `TMUndecidable.of_TMReduction` are **proved theorems** (see
-[`Reduction/TMDecidable.lean`](Reduction/TMDecidable.lean)).
+> **Soundness note.** An earlier `EncodedHaltMPCP` baked
+> `NoBlankWrites ∧ NoLeftBoundary` into its predicate, which forced a
+> reduction to branch on the *undecidable* `NoLeftBoundary` — making
+> its `TMComputable` witness a *false* axiom. This was found and fixed:
+> the predicate is now the bare `MHasSolution`, the HUM side conditions
+> are discharged on the `EncodedHalt ≤ EncodedHaltMPCP` edge via the
+> wrapper's proof fields, and **no reduction branches on anything
+> undecidable** — so all 5 `TMComputable` postulates are honest.
 
-Discharging the remaining postulates is the main work of completing the
-project. See [`TODO.md`](TODO.md) for the prioritised plan.
+---
 
 ## Repository layout
 
 ```
-PCP/                   ← Halt ≤_m MPCP ≤_m PCP chain
-  Basic.lean, MPCP.lean, Reduction.lean, Halt.lean
-  Reductions/HaltToMPCP.lean (4100 LoC, the main reduction)
-  Reductions/HaltToPCP.lean  (composition)
+Reduction/                 ← Phase 1 framework + the reduction graph
+  Basic, Composition, Transfer, Notation     core: Problem, ManyOneReduction, …
+  Graph, Search, Tactic                      the `by reduce_diag` tactic
+  TMDecidable                                TM-level (un)decidability
+  Instances, Encoded                         problem nodes + first edges
+  HaltUndecidable                            halt_undecidable → TMUndecidable bridge
+  StackMap, StackEncoding                    per-symbol / List Bool encodings
+  EncodedPCP, EncodedHaltMPCP,
+    EncodedHaltNormalised, EncodedCFG,
+    EncodedLB                                the reduction-graph edges
+  Smoke                                      #eval graph + `by reduce_diag` tests
 
-CFG/                   ← PCP ≤_m CFG-Intersection-Nonempty
-  Basic.lean, PcpReduction.lean
+Halt/                      ← halting-problem undecidability + Rice
+  Diagonal, Basic, TMCode, Encoding,
+    Pair, Helpers, CodeOf, Undecidable       the diagonal proof
+  Normalise                                  postulated HUM wrapper
+  Rice/Basic, TrivialTMs, Extender           Rice scaffolding
+  Rice/Bisim                                 the 4-phase extender bisimulation
+  Rice/Theorem                               restricted Rice + HaltsOnEverything
 
-Halt/                  ← halting-problem undecidability
-  Diagonal.lean, Basic.lean, TMCode.lean, Encoding.lean,
-  Pair.lean, Helpers.lean, CodeOf.lean, Undecidable.lean
-  Normalise.lean        ← postulated HUM-normalising wrapper
-  Rice/
-    Basic.lean, TrivialTMs.lean, Extender.lean,
-    Theorem.lean        ← restricted Rice + HaltsOnEverything
+PCP/                       ← Halt ≤ MPCP ≤ PCP chain (HUM construction)
+CFG/                       ← PCP ≤ CFG-intersection-nonempty
 
-Reduction/             ← Phase 1 framework + DiagonaLean abstractions
-  Basic.lean, Composition.lean, Transfer.lean, Notation.lean
-  Graph.lean            ← @[reduction_graph], @[undecidable_anchor],
-                           @[tm_undecidable_anchor]
-  Search.lean           ← backward DFS path search
-  Tactic.lean           ← `by reduce_diag`
-  TMDecidable.lean      ← TM-level undecidability primitives
-  Instances.lean, Encoded.lean
-  HaltUndecidable.lean  ← halt_undecidable → TMUndecidable bridge
-  EncodedHaltNormalised.lean  ← HUM reduction
-  StackMap.lean, EncodedPCP.lean, EncodedHaltMPCP.lean, EncodedCFG.lean
-  StackEncoding.lean, EncodedLB.lean  ← List Bool-input variants
-  Smoke.lean            ← #evals graph + tests `by reduce_diag`
-
-PCP.lean / CFG.lean / Halt.lean / Reduction.lean  ← library roots
-Main.lean                ← executable entry point
-TODO.md                  ← prioritised work plan
-ROADMAP.md               ← proof-chain architecture
+PCP.lean CFG.lean Halt.lean Reduction.lean   library roots
 ```
 
-## Conventions
-
-The development uses [`cslib`](https://github.com/leanprover/cslib)'s
-`Turing.SingleTapeTM` for the Turing-machine machinery and follows
-cslib's conventions (module-style headers, `public import`,
-`@[expose] public section` for code, `public meta section` for
-metaprogramming). The CFG module uses Mathlib's `ContextFreeGrammar`.
-
-The `Halt ≤_m MPCP` reduction follows the Hopcroft–Ullman–Motwani
-one-sided-tape design: the simulation tile set does not include a
-`leftMoveBoundaryTile`, and the TM is required to satisfy
-`NoLeftBoundary` (no left-move at the left tape boundary) in addition
-to `NoBlankWrites` (no blank symbol written). The HUM-normalising
-wrapper in `Halt.Normalise` lifts these side conditions for the
-end-to-end chain.
+---
 
 ## Building
 
 ```sh
-lake build
+lake build                  # builds the four libraries + the `pcp` executable
+lake build Reduction.Smoke  # runs the graph #eval + `by reduce_diag` tests
 ```
 
-builds the four current libraries (`PCP`, `CFG`, `Halt`, `Reduction`)
-and the `pcp` executable. Cold-cache build (including Mathlib) takes
-~20–40 minutes; incremental builds are seconds.
+A cold build (including Mathlib) takes ~20–40 minutes; incremental
+builds are seconds.
 
-To run the smoke test:
+---
 
-```sh
-lake build Reduction.Smoke
-```
+## Conventions
 
-This `#eval`s the registered graph and exercises `by reduce_diag` on
-13 examples across the chain.
+* Module-style headers: `module`, `public import`,
+  `@[expose] public section` for ordinary code and `public meta
+  section` for metaprogramming (the `@[reduction_graph]` machinery).
+* The `Halt ≤ MPCP` reduction uses the Hopcroft–Ullman–Motwani
+  one-sided-tape design, gated by `NoBlankWrites` / `NoLeftBoundary`;
+  the `normalisingWrapper` lifts these for the end-to-end chain.
+* Every commit keeps `lake build` clean — **no `sorry`**, no warnings.
+  Each `axiom` is catalogued here and documented at its definition.
 
 ## License
 
