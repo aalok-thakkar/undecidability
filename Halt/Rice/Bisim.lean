@@ -117,7 +117,7 @@ lemma writtenTape_step (k : ℕ) (hk : k < encodedLen c) :
   have h_take : (Halt.Encoding.encodeTMCode c).take (k + 1) =
       (Halt.Encoding.encodeTMCode c).take k ++
         [(Halt.Encoding.encodeTMCode c).get ⟨k, h_len⟩] := by
-    rw [List.take_succ]
+    rw [List.take_add_one]
     congr 1
     rw [List.getElem?_eq_getElem h_len]
     rfl
@@ -188,5 +188,121 @@ theorem write_phase :
   have h := write_phase_aux c (encodedLen c - 1) 0 (encodedLen_pos c)
     (by have := encodedLen_pos c; omega)
   rwa [writtenTape_zero] at h
+
+/-! ## Phase 3: move-back
+
+The move-back phase walks the head left from past-the-end back to the
+start of `encodeTMCode c`. The tape is tracked by a two-list split
+`splitTape pre suf` (with `pre ++ suf = encodeTMCode c`): `pre` sits
+reversed on the left stack, `suf` is "head ++ right". A `move_left`
+moves the last element of `pre` to the front of `suf`. -/
+
+/-- A `BiTape` representing `encodeTMCode c` split as `pre ++ suf`:
+`pre` reversed on the left, `suf` as head-plus-right. -/
+def splitTape (pre suf : List Bool) : BiTape Bool :=
+  match suf with
+  | [] => ⟨none, StackTape.map_some pre.reverse, ∅⟩
+  | h :: t => ⟨some h, StackTape.map_some pre.reverse, StackTape.map_some t⟩
+
+/-- With empty `pre`, `splitTape` is just `mk₁`. -/
+lemma splitTape_nil_left (enc : List Bool) :
+    splitTape [] enc = BiTape.mk₁ enc := by
+  cases enc with
+  | nil => rfl
+  | cons h t => rfl
+
+/-- The post-write tape `writtenTape c (encodedLen c)` is `splitTape`
+with all of `encodeTMCode c` on the left. -/
+lemma writtenTape_eq_splitTape :
+    writtenTape c (encodedLen c) =
+      splitTape (Halt.Encoding.encodeTMCode c) [] := by
+  unfold writtenTape splitTape encodedLen
+  rw [List.take_length]
+
+/-- A `move_left` shifts the last element of `pre` to the front of
+`suf`. -/
+lemma move_left_splitTape (pre suf : List Bool) (x : Bool) :
+    (splitTape (pre ++ [x]) suf).move_left = splitTape pre (x :: suf) := by
+  have hrev : (pre ++ [x]).reverse = x :: pre.reverse := by
+    rw [List.reverse_append, List.reverse_singleton, List.singleton_append]
+  cases suf with
+  | nil =>
+    show (⟨none, StackTape.map_some (pre ++ [x]).reverse, ∅⟩
+            : BiTape Bool).move_left = _
+    rw [hrev, map_some_cons]
+    rfl
+  | cons h t =>
+    show (⟨some h, StackTape.map_some (pre ++ [x]).reverse,
+            StackTape.map_some t⟩ : BiTape Bool).move_left = _
+    rw [hrev, map_some_cons]
+    rfl
+
+/-- Writing the head symbol back leaves a `BiTape` unchanged. -/
+lemma write_head_self (t : BiTape Bool) : t.write t.head = t := rfl
+
+/-- A move-back step at counter `0`: hand off to the simulate phase. -/
+lemma moveBack_step_zero (t : BiTape Bool) (h0 : 0 < encodedLen c + 1) :
+    (riceConstTM c).step ⟨some (RiceState.moveBack ⟨0, h0⟩), t⟩ =
+      some ⟨some (RiceState.inC c.q₀), t⟩ := by
+  show (riceConstTM c).step ⟨some (RiceState.moveBack ⟨0, h0⟩), t⟩ = _
+  simp only [SingleTapeTM.step, riceConstTM, riceTr]
+  rfl
+
+/-- A move-back step at a positive counter `m+1`: move left, decrement. -/
+lemma moveBack_step_pos (t : BiTape Bool) (m : ℕ)
+    (hm : m + 1 < encodedLen c + 1) (hm' : m < encodedLen c + 1) :
+    (riceConstTM c).step ⟨some (RiceState.moveBack ⟨m + 1, hm⟩), t⟩ =
+      some ⟨some (RiceState.moveBack ⟨m, hm'⟩), t.move_left⟩ := by
+  show (riceConstTM c).step ⟨some (RiceState.moveBack ⟨m + 1, hm⟩), t⟩ = _
+  simp only [SingleTapeTM.step, riceConstTM, riceTr]
+  rfl
+
+/-- Induction core for the move-back phase, by induction on the
+move-back counter `m` (which equals `pre.length`). -/
+private lemma moveBack_phase_aux :
+    ∀ (m : ℕ) (pre suf : List Bool) (_ : pre.length = m)
+      (_ : pre ++ suf = Halt.Encoding.encodeTMCode c)
+      (hlen : m < encodedLen c + 1),
+      ReflTransGen (riceConstTM c).TransitionRelation
+        ⟨some (RiceState.moveBack ⟨m, hlen⟩), splitTape pre suf⟩
+        ⟨some (RiceState.inC c.q₀),
+          BiTape.mk₁ (Halt.Encoding.encodeTMCode c)⟩ := by
+  intro m
+  induction m with
+  | zero =>
+    intro pre suf hm h hlen
+    have h_pre : pre = [] := List.eq_nil_of_length_eq_zero hm
+    subst h_pre
+    have h_suf : suf = Halt.Encoding.encodeTMCode c := by simpa using h
+    subst h_suf
+    rw [splitTape_nil_left]
+    exact ReflTransGen.single
+      (moveBack_step_zero c (BiTape.mk₁ (Halt.Encoding.encodeTMCode c)) hlen)
+  | succ m ih =>
+    intro pre suf hm h hlen
+    obtain ⟨pre', x, rfl⟩ : ∃ pre' x, pre = pre' ++ [x] := by
+      rcases List.eq_nil_or_concat pre with h_nil | ⟨pre', x, h_eq⟩
+      · rw [h_nil] at hm; simp at hm
+      · exact ⟨pre', x, by rw [h_eq, List.concat_eq_append]⟩
+    have hm' : pre'.length = m := by
+      rw [List.length_append] at hm; simpa using hm
+    have hlen' : m < encodedLen c + 1 := by omega
+    have hstep := moveBack_step_pos c (splitTape (pre' ++ [x]) suf) m hlen hlen'
+    rw [move_left_splitTape] at hstep
+    refine ReflTransGen.head hstep ?_
+    exact ih pre' (x :: suf) hm' (by simpa using h) hlen'
+
+/-- **Move-back phase.** From `⟨moveBack (encodedLen c), writtenTape c
+(encodedLen c)⟩`, `riceConstTM c` reaches `⟨inC c.q₀, mk₁ (encodeTMCode
+c)⟩` — the simulate phase begins exactly where `c.toTM` would start on
+input `encodeTMCode c`. -/
+theorem moveBack_phase :
+    ReflTransGen (riceConstTM c).TransitionRelation
+      ⟨some (RiceState.moveBack ⟨encodedLen c, Nat.lt_succ_self _⟩),
+        writtenTape c (encodedLen c)⟩
+      ⟨some (RiceState.inC c.q₀), BiTape.mk₁ (Halt.Encoding.encodeTMCode c)⟩ := by
+  rw [writtenTape_eq_splitTape]
+  exact moveBack_phase_aux c (encodedLen c) (Halt.Encoding.encodeTMCode c) []
+    rfl (List.append_nil _) (Nat.lt_succ_self _)
 
 end Halt.Rice
