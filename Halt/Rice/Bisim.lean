@@ -88,4 +88,105 @@ theorem erase_phase (w : List Bool) :
     refine ReflTransGen.head ?_ ih
     exact erase_step_cons c a rest
 
+/-! ## Phase 2: write
+
+The write phase lays `encodeTMCode c` onto the tape one bit at a time,
+moving right after each write. After `k` bits the tape is `writtenTape
+c k`: head blank, the first `k` bits sit *reversed* on the left stack
+(`map_some` — all `some`, so no trimming), right stack empty. -/
+
+/-- `StackTape.map_some` of a cons is a `cons` of `map_some`. -/
+lemma map_some_cons (x : Bool) (xs : List Bool) :
+    StackTape.map_some (x :: xs) =
+      StackTape.cons (some x) (StackTape.map_some xs) := rfl
+
+/-- The tape after the write phase has placed the first `k` bits of
+`encodeTMCode c`. -/
+def writtenTape (c : Halt.TMCode) (k : ℕ) : BiTape Bool :=
+  ⟨none, StackTape.map_some ((Halt.Encoding.encodeTMCode c).take k).reverse, ∅⟩
+
+lemma writtenTape_zero : writtenTape c 0 = BiTape.nil := rfl
+
+/-- Writing bit `k` over the (blank) head of `writtenTape c k` and
+moving right yields `writtenTape c (k+1)`. -/
+lemma writtenTape_step (k : ℕ) (hk : k < encodedLen c) :
+    ((writtenTape c k).write (some (encodedBit c ⟨k, hk⟩))).optionMove
+        (some Dir.right) =
+      writtenTape c (k + 1) := by
+  have h_len : k < (Halt.Encoding.encodeTMCode c).length := hk
+  have h_take : (Halt.Encoding.encodeTMCode c).take (k + 1) =
+      (Halt.Encoding.encodeTMCode c).take k ++
+        [(Halt.Encoding.encodeTMCode c).get ⟨k, h_len⟩] := by
+    rw [List.take_succ]
+    congr 1
+    rw [List.getElem?_eq_getElem h_len]
+    rfl
+  show (⟨some (encodedBit c ⟨k, hk⟩),
+          StackTape.map_some ((Halt.Encoding.encodeTMCode c).take k).reverse,
+          ∅⟩ : BiTape Bool).move_right = writtenTape c (k + 1)
+  show (⟨none, StackTape.cons (some (encodedBit c ⟨k, hk⟩))
+          (StackTape.map_some ((Halt.Encoding.encodeTMCode c).take k).reverse),
+          ∅⟩ : BiTape Bool) = writtenTape c (k + 1)
+  unfold writtenTape
+  rw [h_take, List.reverse_append, List.reverse_singleton,
+      List.singleton_append, map_some_cons]
+  rfl
+
+/-- A write step at a *non-final* index `k` (`k+1 < encodedLen c`):
+move to `writeBit (k+1)`. -/
+lemma writeBit_step_mid (k : ℕ) (hk : k < encodedLen c)
+    (hk1 : k + 1 < encodedLen c) :
+    (riceConstTM c).step ⟨some (RiceState.writeBit ⟨k, hk⟩), writtenTape c k⟩ =
+      some ⟨some (RiceState.writeBit ⟨k + 1, hk1⟩), writtenTape c (k + 1)⟩ := by
+  show (riceConstTM c).step ⟨some (RiceState.writeBit ⟨k, hk⟩), writtenTape c k⟩ = _
+  have h_head : (writtenTape c k).head = none := rfl
+  simp only [SingleTapeTM.step, riceConstTM, riceTr, h_head, dif_pos hk1]
+  rw [writtenTape_step]
+
+/-- A write step at the *final* index `k` (`k+1 = encodedLen c`): move
+to `moveBack (encodedLen c)`. -/
+lemma writeBit_step_last (k : ℕ) (hk : k < encodedLen c)
+    (hk1 : k + 1 = encodedLen c) :
+    (riceConstTM c).step ⟨some (RiceState.writeBit ⟨k, hk⟩), writtenTape c k⟩ =
+      some ⟨some (RiceState.moveBack ⟨encodedLen c, Nat.lt_succ_self _⟩),
+              writtenTape c (k + 1)⟩ := by
+  show (riceConstTM c).step ⟨some (RiceState.writeBit ⟨k, hk⟩), writtenTape c k⟩ = _
+  have h_head : (writtenTape c k).head = none := rfl
+  have h_not : ¬ (k + 1 < encodedLen c) := by omega
+  simp only [SingleTapeTM.step, riceConstTM, riceTr, h_head, dif_neg h_not]
+  rw [writtenTape_step]
+
+/-- Induction core for the write phase: from `⟨writeBit k, writtenTape
+c k⟩`, with `d` bits still to write, reach the move-back phase. -/
+private lemma write_phase_aux (d : ℕ) :
+    ∀ (k : ℕ) (hk : k < encodedLen c), k + d + 1 = encodedLen c →
+      ReflTransGen (riceConstTM c).TransitionRelation
+        ⟨some (RiceState.writeBit ⟨k, hk⟩), writtenTape c k⟩
+        ⟨some (RiceState.moveBack ⟨encodedLen c, Nat.lt_succ_self _⟩),
+          writtenTape c (encodedLen c)⟩ := by
+  induction d with
+  | zero =>
+    intro k hk hd
+    have hk1 : k + 1 = encodedLen c := by omega
+    have h_step := writeBit_step_last c k hk hk1
+    rw [hk1] at h_step
+    exact ReflTransGen.single h_step
+  | succ d ih =>
+    intro k hk hd
+    have hk1 : k + 1 < encodedLen c := by omega
+    refine ReflTransGen.head (writeBit_step_mid c k hk hk1) ?_
+    exact ih (k + 1) hk1 (by omega)
+
+/-- **Write phase.** From `⟨writeBit 0, ∅⟩`, `riceConstTM c` reaches
+`⟨moveBack (encodedLen c), writtenTape c (encodedLen c)⟩` — the start
+of the move-back phase, with `encodeTMCode c` fully laid down. -/
+theorem write_phase :
+    ReflTransGen (riceConstTM c).TransitionRelation
+      ⟨some (RiceState.writeBit ⟨0, encodedLen_pos c⟩), BiTape.nil⟩
+      ⟨some (RiceState.moveBack ⟨encodedLen c, Nat.lt_succ_self _⟩),
+        writtenTape c (encodedLen c)⟩ := by
+  have h := write_phase_aux c (encodedLen c - 1) 0 (encodedLen_pos c)
+    (by have := encodedLen_pos c; omega)
+  rwa [writtenTape_zero] at h
+
 end Halt.Rice
